@@ -11,6 +11,16 @@ Select the VoD that contains the clip you want. Enter the start time and end tim
 
 A dialog will open showing the progress. A success or failure message will be displayed on completion. 
 
+## How does it work?
+
+For mp4 video's hosted on servers that support the HTML5 `Range` header, a user can request a section of data (or byte range) from the middle of the video. This is how you can seek around in the video player. This makes it trivial to request a section of data out of the middle of the file.
+
+Remember though that mp4 is a container format, which means that simply pull data out of the middle of the video will result in a corrupted file. 
+
+![MP4 Container Structure](https://chillaspect.com/images/mp4_structure.png "MP4 Container Structure")
+
+This tool makes use of the [FFMPEG utility](https://ffmpeg.org/about.html) to take the chunk of data and rebuild the structure of the mp4 file so it will be playable.
+
 ## Releases
 
 The easiest way to get started using VodSlicer is to download the latest release executable and run it. Releases are located at this [link](https://github.com/chillfactor032/VodSlicer/releases).

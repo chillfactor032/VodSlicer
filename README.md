@@ -13,7 +13,7 @@ A dialog will open showing the progress. A success or failure message will be di
 
 ## Releases
 
-The easiest way to get started using VodSlicer is to download a release exe and execute it. Releases are located at this [link](https://github.com/chillfactor032/VodSlicer/releases).
+The easiest way to get started using VodSlicer is to download the latest release executable and run it. Releases are located at this [link](https://github.com/chillfactor032/VodSlicer/releases).
 
 ## Build From Source
 

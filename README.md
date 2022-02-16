@@ -1,5 +1,5 @@
 # VodSlicer
-This tool extracts subclips of mp4 videos hosted on a remote server. This is very useful when the files are so large they take a long time to download. 
+This is a Windows 64 bit application that extracts subclips of mp4 videos hosted on a remote server. This is very useful when the files are so large they take a long time to download. 
 
 ![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer1.png "Vod Slicer")
 

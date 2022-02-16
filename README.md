@@ -17,7 +17,7 @@ For mp4 video's hosted on servers that support the HTML5 `Range` header, a user 
 
 Remember though that mp4 is a container format, which means that simply pull data out of the middle of the video will result in a corrupted file. 
 
-![MP4 Container Structure](https://chillaspect.com/images/mp4_structure.png "MP4 Container Structure")
+![MP4 Container Structure](https://chillaspect.com/images/mp4_structure2.png "MP4 Container Structure")
 
 This tool makes use of the [FFMPEG utility](https://ffmpeg.org/about.html) to take the chunk of data and rebuild the structure of the mp4 file so it will be playable.
 

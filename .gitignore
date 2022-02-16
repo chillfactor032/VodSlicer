@@ -1,3 +1,12 @@
+
+VodSlicer.build/*
+VodSlicer.dist/*
+VodSlicer.onefile-build/*
+vodslicer
+Resources.py
+
+*.bak
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

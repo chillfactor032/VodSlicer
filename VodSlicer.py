@@ -1,0 +1,474 @@
+import sys
+import json
+import os
+import requests
+import re
+import urllib
+import subprocess
+import time
+import hashlib
+
+# PySide6 Imports
+from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory
+from PySide6.QtCore import QFile, Signal, QObject, QStandardPaths, QSettings, Qt, QTextStream, QThreadPool, QRunnable
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPixmap, QIcon, QColor, QPalette
+
+# VodSlicer Imports
+#from qt_material import apply_stylesheet
+import Resources
+import UI_Components as UI
+
+class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
+    def __init__(self):
+        super(VodSlicerApp, self).__init__()
+        
+        #Read Version File From Resources
+        self.app_name = "VoD Slicer"
+        version_file = QFile(":version.json")
+        version_file.open(QFile.ReadOnly)
+        text_stream = QTextStream(version_file)
+        version_file_text = text_stream.readAll()
+        self.version_dict = json.loads(version_file_text)
+        self.version = self.version_dict["version"]
+
+        ## Get Directories to Store Files
+        self.temp_dir = os.path.join(QStandardPaths.writableLocation(QStandardPaths.TempLocation), "VodSlicer").replace("\\", "/")
+        self.config_dir = QStandardPaths.writableLocation(QStandardPaths.ConfigLocation)
+        self.documents_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+
+        # Create config directory if it doesnt exist
+        if(not os.path.isdir(self.config_dir)):
+            os.makedirs(self.config_dir, exist_ok=True)
+        self.ini_path = os.path.join(self.config_dir, "VodSlicer.ini").replace("\\", "/")
+
+        ## Copy FFMPEG to Local Config Dir
+        self.ffmpeg_path = os.path.join(self.config_dir, "ffmpeg-win64.exe").replace("\\", "/")
+        self.ffmpeg_md5 = ""
+        if(os.path.exists(self.ffmpeg_path)==False):
+            ffmpeg_file = QFile(":resources/files/ffmpeg-win64.exe")
+            ffmpeg_file.open(QFile.ReadOnly)
+            data = ffmpeg_file.readAll()
+            ffmpeg_bytes = data.data()
+            with open(self.ffmpeg_path, "wb") as f:
+                f.write(ffmpeg_bytes)
+                self.ffmpeg_md5 = hashlib.md5(ffmpeg_bytes).hexdigest()
+            if(os.path.exists(self.ffmpeg_path)==False):
+                print("Failed to create FFMPEG Binary")
+        else:
+            with open(self.ffmpeg_path, 'rb') as f:
+                ffmpeg_bytes = f.read()    
+                self.ffmpeg_md5 = hashlib.md5(ffmpeg_bytes).hexdigest()
+
+        # Get Settings From Ini File
+        self.settings = QSettings(self.ini_path, QSettings.IniFormat)
+        self.vod_url = self.settings.value("VodSlicer/vod_url", "")
+        self.vod_user = self.settings.value("VodSlicer/vod_user", "")
+        self.vod_password = self.settings.value("VodSlicer/vod_password", "")
+        self.previous_save_dir = self.settings.value("VodSlicer/previous_save_dir", self.documents_dir)
+
+        #Load UI Components
+        self.setupUi(self)
+        self.setWindowTitle(f"{self.app_name} {self.version}")
+        self.vod_list_model = QStandardItemModel()
+        self.vod_list_view.setModel(self.vod_list_model)
+        self.vod_list_view.setSpacing(3)
+        self.vod_url_edit.setText(self.vod_url)
+        self.vod_url_edit.setCursorPosition(0)
+        self.user_edit.setText(self.vod_user)
+        self.password_edit.setText(self.vod_password)
+        self.password_edit.setEchoMode(QLineEdit.Password)
+        self.progress_dialog = ProgressDialog()
+        reload_icon_pixmap = QStyle.StandardPixmap.SP_BrowserReload
+        reload_icon = self.style().standardIcon(reload_icon_pixmap)
+        self.save_button.setIcon(reload_icon)
+
+        #Set window Icon
+        default_icon_pixmap = QStyle.StandardPixmap.SP_FileDialogListView
+        lps_icon_pixmap = QPixmap(":resources/img/vod_slicer.ico")
+        self.vodslicer_icon = QIcon(lps_icon_pixmap)
+        default_icon = self.style().standardIcon(default_icon_pixmap)
+        if(self.vodslicer_icon):
+            self.setWindowIcon(self.vodslicer_icon)
+        else:
+            self.setWindowIcon(default_icon)
+            self.vodslicer_icon = default_icon
+
+        # Button Signals
+        self.save_button.clicked.connect(self.click_save_button)
+        self.slice_button.clicked.connect(self.click_slice_button)
+
+        ## ThreadPool
+        self.threadpool = QThreadPool()
+
+        # Initialize the vod list
+        self.refresh(True)
+
+        geometry = self.settings.value("VodSlicer/geometry")
+        window_state = self.settings.value("VodSlicer/windowState")
+        if(geometry and window_state):
+            self.restoreGeometry(geometry) 
+            self.restoreState(window_state)
+
+    def get_selected_vod(self):
+        sel_indexes = self.vod_list_view.selectedIndexes()
+        if(len(sel_indexes)>0):
+            return sel_indexes[0].data()
+        return None
+
+    def click_save_button(self):
+        self.settings.setValue("VodSlicer/vod_url", self.vod_url_edit.text().strip())
+        self.settings.setValue("VodSlicer/vod_user", self.user_edit.text().strip())
+        self.settings.setValue("VodSlicer/vod_password", self.password_edit.text().strip())
+        self.settings.sync()
+        self.refresh()
+
+    def refresh(self, launch=False):
+        self.vod_list_model.removeRows(0, self.vod_list_model.rowCount())
+        self.vod_url = self.vod_url_edit.text().strip()
+        self.vod_user = self.user_edit.text().strip()
+        self.vod_password = self.password_edit.text()
+        self.refresh_index(launch, self.vod_url, self.vod_user, self.vod_password)
+        
+    def refresh_index(self, launch, url, user=None, password=None):
+        if(len(url)==0):
+            return
+        index = []
+        try:
+            if(user is None or password is None):
+                r = requests.get(url)
+            else:
+                r = requests.get(url, auth=requests.auth.HTTPBasicAuth(user, password))
+            if(launch and r.status_code!=200):
+                self.index = index
+                return
+            if(r.status_code == 404):
+                self.index = index
+                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nSite not found\n{url}")
+            elif(r.status_code == 401):
+                self.index = index
+                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nInvalid User or Password")
+            elif(r.status_code != 200):
+                self.index = index
+                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nNo VoD listing found at\n{url}")
+        except (requests.exceptions.MissingSchema, requests.exceptions.ConnectionError) as err:
+            QMessageBox.warning(self, "VoD Slicer", f"Could not request VoDs\n{repr(err)}")
+            return
+
+        index_raw = r.text
+        index_lines = r.text.splitlines()
+        for line in index_lines:
+            regex = re.findall(r'<a href="(.+?)">', line)
+            if(regex and len(regex)>0):
+                link = regex[0]
+                name = urllib.parse.unquote(link)
+                if(name[-1]=="/"):
+                    continue
+                index.append({"link":f"{url}{link}", "name":name})
+        index.reverse()
+        self.index = index
+        self.vod_list_model.clear()
+        for index in self.index:
+            item = QStandardItem(index["name"])
+            self.vod_list_model.appendRow(item)
+        if(self.vod_list_model.rowCount()>0):
+            i = self.vod_list_model.index(0, 0)
+            self.vod_list_view.setCurrentIndex(i)
+
+    def click_slice_button(self):
+        clip_name = self.clip_name_edit.text().strip()
+        if(len(clip_name) == 0):
+            clip_name = "clip.mp4"
+        if(clip_name[-4:] != ".mp4"):
+            clip_name = clip_name + ".mp4"
+        default_path = os.path.join(self.previous_save_dir, clip_name).replace("\\", "/")
+        response = QFileDialog.getSaveFileName(self, "Clip File Destination", default_path, "mp4 Video (*.mp4)")
+        filename = response[0]
+        if(len(filename) == 0):
+            return
+        split = os.path.split(filename)
+        if(len(split)>0):
+            self.previous_save_dir = split[0]
+            self.settings.setValue("VodSlicer/previous_save_dir", self.previous_save_dir)
+        vod_name = self.get_selected_vod()
+        vod_url = None
+        for ind in self.index:
+            if(ind["name"] == vod_name):
+                vod_url = ind["link"]
+                break
+        if(vod_url is None):
+            return
+        self.vod_url = vod_url
+        self.vod_user = self.user_edit.text().strip()
+        self.vod_password = self.password_edit.text()
+        start = self.start_time_edit.text().strip()
+        end = self.end_time_edit.text().strip()
+        self.progress_dialog = ProgressDialog()
+        self.vodslicer = VodSlicer(self.ffmpeg_path, self.vod_url, self.vod_user, self.vod_password, start, end, filename, self.ffmpeg_md5)
+        self.vodslicer.signals.done.connect(self.vodslicer_done)
+        self.vodslicer.signals.progress.connect(self.vodslicer_progress)
+        self.save_button.setEnabled(False)
+        self.slice_button.setEnabled(False)
+        self.threadpool.start(self.vodslicer)
+        result = self.progress_dialog.exec()
+        if(result == QDialog.Rejected):
+            self.vodslicer.abort()
+
+    def vodslicer_progress(self, progress_dict):
+        self.progress_dialog.update_progress(progress_dict)
+
+    def vodslicer_done(self, result, msg):
+        self.progress_dialog.finished()
+        self.save_button.setEnabled(True)
+        self.slice_button.setEnabled(True)
+        if(result):
+            QMessageBox.information(self, "VodSlicer Done", f"{msg}")
+        else:
+            QMessageBox.critical(self, "VodSlicer Failed", f"{msg}")
+
+    def closeEvent(self, evt):
+        self.settings.setValue("VodSlicer/vod_url", self.vod_url_edit.text().strip())
+        self.settings.setValue("VodSlicer/vod_user", self.user_edit.text().strip())
+        self.settings.setValue("VodSlicer/vod_password", self.password_edit.text().strip())
+        self.settings.setValue("VodSlicer/geometry", self.saveGeometry())
+        self.settings.setValue("VodSlicer/windowState", self.saveState())
+        self.settings.sync()
+
+
+
+class VodSlicer(QRunnable):
+
+    class Signals(QObject):
+        done = Signal(bool, str)
+        progress = Signal(dict)
+
+    def __init__(self, ffmpeg_path, url, user, password, start, end, outfile_path, md5hash):
+        super(VodSlicer, self).__init__()
+        self.signals = self.Signals()
+        self.ffmpeg_binary_path = ffmpeg_path
+        self.set_url(url, user, password)
+        self.set_times(start, end)
+        self.output_file = outfile_path
+        self._abort = False
+        self.md5hash = md5hash
+        self.output = ""
+
+    def set_output_file(self, outfile):
+        self.output_file = outfile
+
+    def set_times(self, start, end):
+        if(type(start) == int or type(start) == float):
+            self.start_secs = start
+        else:
+            self.start_secs = self._str_to_secs(start)
+        if(type(end) == int or type(end) == float):
+            self.end_secs = end
+        else:
+            self.end_secs = self._str_to_secs(end)
+        self.duration_secs = self.end_secs - self.start_secs
+
+    def set_url(self, url, user=None, password=None):
+        if(user is None or password is None):
+            self.url = url
+        else:
+            self.url = url
+            split = url.split("//")
+            http = split[0] + "//"
+            base_url = split[1]
+            self.url = f"{http}{user}:{password}@{base_url}"
+
+    def _str_to_secs(self, time_str):
+        hours = 0
+        mins = 0
+        secs = 0
+        try:
+            ms = 0
+            split = time_str.split(":")
+            if(len(split)==3):
+                hours = int(int(split[0]))
+                mins = int(split[1])
+                secs = float(split[2])
+            elif(len(split)==2):
+                mins = int(split[0])
+                secs = float(split[1])
+        except Exception as e:
+            return 0
+        return (hours * 60 * 60) + (mins * 60) + secs
+
+    def run(self):
+        if(self.duration_secs<=0):
+            self.done(False, "Invalid times specified.")
+
+        progress_dict = {}
+        progress_dict["status"] = "Verifying integrity of ffmpeg"
+        self.signals.progress.emit(progress_dict)
+
+        # Verify integrity of ffmpeg binary
+        md5 = ""
+        with open(self.ffmpeg_binary_path, 'rb') as f:
+            ffmpeg_bytes = f.read()    
+            md5 = hashlib.md5(ffmpeg_bytes).hexdigest()
+        if(md5 != self.md5hash):
+            self.done(False, "FFMPEG file verification failed.")
+
+        cmd = [
+            self.ffmpeg_binary_path,
+            "-y",
+            "-ss", 
+            "%0.2f"%self.start_secs,
+            "-i", self.url,
+            "-t", "%0.2f"%self.duration_secs,
+            "-map", "0", "-vcodec", "copy", "-acodec", "copy", self.output_file
+        ]
+        
+        progress_dict["status"] = "Analyzing MP4 Atoms"
+        self.signals.progress.emit(progress_dict)
+
+        # Run FFMPEG To extract video data from timestamps
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdin=subprocess.PIPE, startupinfo=si)
+        process.stdin.write("?q".encode("utf-8"))
+        chunk = ""
+        while process.poll() is None:
+            chunk += process.stderr.read(16).decode("utf-8")
+            
+            if("\r" in chunk):
+                split = chunk.split("\r")
+                chunk = split[0]
+                self.output += chunk
+                self.process_output(chunk)
+                chunk = split[1]
+            if(self._abort):
+                process.terminate()
+                break
+            time.sleep(0.01)
+
+        if(self._abort):
+            self.done(False, "Slicing Aborted")
+            return
+        else:
+            if(process.returncode == 0):
+                self.done(True, "Slicing Successful")
+            else:
+                print(self.output)
+                self.done(False, f"FFMPEG exe error, Invalid URL?\n\n FFMPEG Return Code: {process.returncode}")
+
+    def get_output(self):
+        return self.output
+
+    def abort(self):
+        self._abort = True
+
+    def process_output(self, line):
+        percent = 0
+        msg = ""
+        line = line.strip()
+        if(line[0:6] != "frame="):
+            return
+        progress_dict = {}
+        element_list = []
+        split = line.split("=")
+        for x in range(0, len(split)):
+            split[x] = split[x].strip()
+            split2 = split[x].split(" ")
+            if(len(split2)>1):
+                element_list.extend(split2)
+            else:
+                element_list.append(split[x])
+        if(len(element_list)%2==1):
+            return
+        for x in range(0, len(element_list), 2):
+            progress_dict[element_list[x]] = element_list[x+1]
+            if(element_list[x] == "time"):
+                elapsed = self._str_to_secs(element_list[x+1])
+                percent = (elapsed / self.duration_secs)*100
+                progress_dict["progress"] = round(percent,2)
+        progress_dict["status"] = "Extracting video data"
+        self.signals.progress.emit(progress_dict)
+
+    def done(self, result, msg):
+        self.signals.done.emit(result, msg)
+
+
+class ProgressDialog(QDialog):
+
+    class Signals(QObject):
+        abort = Signal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.signals = self.Signals()
+        self.ui = UI.Ui_ProgressDialog()
+        self.ui.setupUi(self)
+        self.ui.abort_button.clicked.connect(self.abort)
+        self.ui.progress_bar.setMinimum(0)
+        self.ui.progress_bar.setMaximum(0)
+        self.ui.progress_bar.setValue(0)
+        self.ui.border_group_box.setStyleSheet("QGroupBox { border: 2px solid rgb(42, 130, 218);  border-radius: 3px; }")
+
+    def update_progress(self, progress_dict):
+        if("frame" in progress_dict.keys()):
+            self.ui.frame_label.setText(progress_dict["frame"])
+        if("fps" in progress_dict.keys()):
+            self.ui.fps_label.setText(progress_dict["fps"])
+        if("size" in progress_dict.keys()):
+            s = progress_dict["size"].replace("kB", "")
+            kB = int(s)
+            if(kB > 1024):
+                kB = round(kB/1024, 1)
+                s = f"{kB} MB"
+            else:
+                s = f"{kB} KB"
+            self.ui.size_label.setText(s)
+        if("time" in progress_dict.keys()):
+            self.ui.time_label.setText(progress_dict["time"])
+        if("bitrate" in progress_dict.keys()):
+            self.ui.bitrate_label.setText(progress_dict["bitrate"])
+        if("speed" in progress_dict.keys()):
+            self.ui.speed_label.setText(progress_dict["speed"])
+        if("status" in progress_dict.keys()):
+            self.ui.status_label.setText(progress_dict["status"])
+        if("progress" in progress_dict.keys()):
+            self.ui.progress_bar.setMaximum(100)
+            self.ui.progress_bar.setValue(progress_dict["progress"])
+    
+    def finished(self):
+        self.done(QDialog.Accepted)
+
+    def abort(self):
+        self.done(QDialog.Rejected)
+
+if __name__ == "__main__":
+    app_name = "VodSlicer"
+    org_name = "ChillAspect"
+    app = QApplication(sys.argv)
+    app.setOrganizationName(org_name)
+    app.setApplicationName(app_name)
+    app.setStyle(QStyleFactory.create("Fusion"))
+    palette = QPalette()
+    background_color = QColor(21,32,43)
+    background_alt_color = QColor(34,48,60)
+    button_color = QColor(136, 153, 166)
+    disabledColor = QColor(127,127,127)
+    palette.setColor(QPalette.Window, background_color)
+    palette.setColor(QPalette.WindowText, Qt.white)
+    palette.setColor(QPalette.Base, QColor(18,18,18))
+    palette.setColor(QPalette.AlternateBase, background_alt_color)
+    palette.setColor(QPalette.ToolTipBase, Qt.white)
+    palette.setColor(QPalette.ToolTipText, Qt.white)
+    palette.setColor(QPalette.Text, Qt.white)
+    palette.setColor(QPalette.Disabled, QPalette.Text, disabledColor)
+    palette.setColor(QPalette.Button, button_color)
+    palette.setColor(QPalette.ButtonText, background_color)
+    palette.setColor(QPalette.Disabled, QPalette.ButtonText, disabledColor)
+    palette.setColor(QPalette.BrightText, Qt.red)
+    palette.setColor(QPalette.Link, QColor(42, 130, 218))
+    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    palette.setColor(QPalette.HighlightedText, Qt.black)
+    palette.setColor(QPalette.Disabled, QPalette.HighlightedText, disabledColor)
+    app.setPalette(palette)
+    app.setStyleSheet("QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }")
+    window = VodSlicerApp()
+    window.show()
+    sys.exit(app.exec())

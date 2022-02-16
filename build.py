@@ -13,7 +13,7 @@ cwd = os.getcwd()
 ui_path = os.path.join(cwd, "resources", "ui")
 destination_file = os.path.join(cwd, "UI_Components.py")
 resource_file = os.path.join(cwd, "VodSlicer.rc")
-
+dist_dir = os.path.join(cwd, "dist")
 target_env = "windows"
 partial = False
 
@@ -31,6 +31,10 @@ print(f"Company Name: {version['company_name']}")
 print(f"Product Name: {version['product_name']}")
 print(f"Product Ver: {version['version']}")
 print()
+
+# Create dist directory if it doesnt exist
+if(not os.path.isdir(dist_dir)):
+    os.makedirs(dist_dir, exist_ok=True)
 
 # Function to find all files in dir_path 
 # with extension (not recursive)
@@ -121,7 +125,7 @@ if(target_env == "windows"):
     cmd = f"py -m nuitka --onefile --standalone " \
             f"--enable-plugin=pyside6,numpy --windows-icon-from-ico={version['ico']} " \
             f"{show_cmd}" \
-            f" -o bin/{OUTPUT_FILE} " \
+            f" -o dist/{OUTPUT_FILE} " \
             f"{INPUT_FILE}"
     
 proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

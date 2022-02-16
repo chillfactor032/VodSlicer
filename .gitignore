@@ -1,4 +1,4 @@
-
+bin/*
 VodSlicer.build/*
 VodSlicer.dist/*
 VodSlicer.onefile-build/*

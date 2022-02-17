@@ -15,7 +15,7 @@ A dialog will open showing the progress. A success or failure message will be di
 
 For mp4 video's hosted on servers that support the HTML5 `Range` header, a user can request a section of data (or byte range) from the middle of the video. This is how you can seek around in the video player. This makes it trivial to request a section of data out of the middle of the file.
 
-Remember though that mp4 is a container format, which means that simply pull data out of the middle of the video will result in a corrupted file. 
+Remember though that mp4 is a container format, which means that simply pulling data out of the middle of the video will result in a corrupted file. 
 
 ![MP4 Container Structure](https://chillaspect.com/images/mp4_structure2.png "MP4 Container Structure")
 
@@ -49,3 +49,17 @@ py build.py
 ```
 
 Now execute `dist/VodSlicer.exe` to run the application.
+
+### Donations
+
+VodSlicer is provided free and without warranty. If you feel compelled to donated here are my crypto addresses below.
+
+Coin | Address
+--- | ---
+BTC | 3C7UT1a2Do3LxFvxZt88S7gsNkRyRKXYCw
+ETH | 0xc24Fc5E6C2b3E1e1eaE62f59Fab8cFBC87b1FEfc
+LTC | MViPMqjn2kdMwbLAbYtgpgnHfzwwpbzUZQ
+
+### Contact
+
+chill@chillaspect.com

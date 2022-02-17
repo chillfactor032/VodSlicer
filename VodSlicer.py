@@ -9,9 +9,9 @@ import time
 import hashlib
 
 # PySide6 Imports
-from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory
+from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QMenu
 from PySide6.QtCore import QFile, Signal, QObject, QStandardPaths, QSettings, Qt, QTextStream, QThreadPool, QRunnable
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QPixmap, QIcon, QColor, QPalette
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPixmap, QIcon, QColor, QPalette, QAction, QCursor
 
 # VodSlicer Imports
 #from qt_material import apply_stylesheet
@@ -68,7 +68,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
 
         #Load UI Components
         self.setupUi(self)
-        self.setWindowTitle(f"{self.app_name} {self.version}")
+        self.setWindowTitle(f"{self.app_name} {self.version} by ChillFacToR")
         self.vod_list_model = QStandardItemModel()
         self.vod_list_view.setModel(self.vod_list_model)
         self.vod_list_view.setSpacing(3)
@@ -97,6 +97,14 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.save_button.clicked.connect(self.click_save_button)
         self.slice_button.clicked.connect(self.click_slice_button)
 
+        # Add Context Menu
+        self.context_menu = QMenu()
+        self.action_about = QAction("About")
+        self.context_menu.addAction(self.action_about)
+        self.action_about.triggered.connect(self.show_about) 
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
         ## ThreadPool
         self.threadpool = QThreadPool()
 
@@ -108,6 +116,13 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         if(geometry and window_state):
             self.restoreGeometry(geometry) 
             self.restoreState(window_state)
+
+    def show_context_menu(self):
+        self.context_menu.popup(QCursor.pos())
+
+    def show_about(self):
+        about_info = f"VodSlicer v{self.version}\n\nAuthor: ChillFacToR032 \nchill@chillaspect.com\n\nhttps://github.com/chillfactor032/VodSlicer"
+        ret = QMessageBox.about(self, "VodSlicer", about_info)
 
     def get_selected_vod(self):
         sel_indexes = self.vod_list_view.selectedIndexes()

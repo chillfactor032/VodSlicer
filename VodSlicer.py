@@ -232,7 +232,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.progress_dialog.update_progress(progress_dict)
 
     def vodslicer_done(self, result, msg):
-        self.progress_dialog.finished()
+        self.progress_dialog.finish()
         self.save_button.setEnabled(True)
         self.slice_button.setEnabled(True)
         if(result):
@@ -448,7 +448,7 @@ class ProgressDialog(QDialog):
             self.ui.progress_bar.setMaximum(100)
             self.ui.progress_bar.setValue(progress_dict["progress"])
     
-    def finished(self):
+    def finish(self):
         self.done(QDialog.Accepted)
 
     def abort(self):

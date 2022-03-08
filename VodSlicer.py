@@ -10,8 +10,8 @@ import hashlib
 
 # PySide6 Imports
 from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QMenu
-from PySide6.QtCore import QFile, Signal, QObject, QStandardPaths, QSettings, Qt, QTextStream, QThreadPool, QRunnable
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QPixmap, QIcon, QColor, QPalette, QAction, QCursor
+from PySide6.QtCore import QFile, Signal, QObject, QStandardPaths, QSettings, Qt, QTextStream, QThreadPool, QRunnable, QUrl
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QPixmap, QIcon, QColor, QPalette, QAction, QCursor, QDesktopServices
 
 # VodSlicer Imports
 #from qt_material import apply_stylesheet
@@ -96,6 +96,9 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         # Button Signals
         self.save_button.clicked.connect(self.click_save_button)
         self.slice_button.clicked.connect(self.click_slice_button)
+        self.about_button.clicked.connect(self.show_about)
+        self.github_button.clicked.connect(self.show_github)
+
 
         # Add Context Menu
         self.context_menu = QMenu()
@@ -116,6 +119,9 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         if(geometry and window_state):
             self.restoreGeometry(geometry) 
             self.restoreState(window_state)
+
+    def show_github(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/chillfactor032/VodSlicer"))
 
     def show_context_menu(self):
         self.context_menu.popup(QCursor.pos())
@@ -143,40 +149,61 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.vod_user = self.user_edit.text().strip()
         self.vod_password = self.password_edit.text()
         self.refresh_index(launch, self.vod_url, self.vod_user, self.vod_password)
+    
+    def get_content_type(self, url, user="", password=""):
+        try:
+            if(len(user)==0 and len(password)==0):
+                r = requests.head(url)
+            else:
+                r = requests.head(url, auth=requests.auth.HTTPBasicAuth(user, password))
+            r.raise_for_status()
+        except Exception as e: raise
+
+        if("Content-Type" in r.headers.keys()):
+            return r.headers["Content-Type"]
+        return "Content Type Missing"
         
-    def refresh_index(self, launch, url, user=None, password=None):
+    def refresh_index(self, launch, url, user="", password=""):
         if(len(url)==0):
             return
         index = []
+        r = None
         try:
-            if(user is None or password is None):
+            content_type = self.get_content_type(url, user, password)
+            if(content_type == "video/mp4"):
+                self.set_status(f"Direct mp4 URL Saved")
+                return
+            elif(content_type != "text/html"):
+                self.set_status(f"Invalid URL", 5000)
+                return
+
+            # If content type is html, determin if its a directory listing
+            if(len(user)==0 and len(password)==0):
                 r = requests.get(url)
             else:
                 r = requests.get(url, auth=requests.auth.HTTPBasicAuth(user, password))
-            if(launch and r.status_code!=200):
-                self.index = index
-                return
-            if(r.status_code == 404):
-                self.index = index
-                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nSite not found\n{url}")
-            elif(r.status_code == 401):
-                self.index = index
-                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nInvalid User or Password")
-            elif(r.status_code != 200):
-                self.index = index
-                QMessageBox.warning(self, "VoD Slicer", f"HTTP Status Code: {r.status_code}\n\nNo VoD listing found at\n{url}")
+            r.raise_for_status()
         except (requests.exceptions.MissingSchema, requests.exceptions.ConnectionError) as err:
-            QMessageBox.warning(self, "VoD Slicer", f"Could not request VoDs\n{repr(err)}")
+            QMessageBox.warning(self, "VoD Slicer", f"Could not request VoDs\n\n{repr(err)}")
+            return
+        except requests.HTTPError as err:
+            QMessageBox.warning(self, "VoD Slicer", f"HTTP Error\n\n{str(err)}")
             return
 
+        # Content is html and we successfully have response
         index_raw = r.text
+
+        if("Index of" not in index_raw):
+            QMessageBox.warning(self, "VoD Slicer", f"URL does not appear to be a directory listing or mp4 file.\n\nEnsure the URL is of the VoD direcoty listing, or an mp4 file.")
+            return
+
         index_lines = r.text.splitlines()
         for line in index_lines:
             regex = re.findall(r'<a href="(.+?)">', line)
             if(regex and len(regex)>0):
                 link = regex[0]
                 name = urllib.parse.unquote(link)
-                if(name[-1]=="/"):
+                if(name[-4:]!=".mp4"):
                     continue
                 index.append({"link":f"{url}{link}", "name":name})
         index.reverse()
@@ -190,6 +217,28 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
             self.vod_list_view.setCurrentIndex(i)
 
     def click_slice_button(self):
+        content_type = ""
+        # Read User and Password
+        self.vod_user = self.user_edit.text().strip()
+        self.vod_password = self.password_edit.text()
+
+        # Determin if link from VoD explorer or direct mp4 file
+        vod_name = self.get_selected_vod()
+        vod_url = None
+        for ind in self.index:
+            if(ind["name"] == vod_name):
+                vod_url = ind["link"]
+                break
+        if(vod_url is None):
+            vod_url = self.vod_url_edit.text().strip()
+            content_type = self.get_content_type(vod_url, self.vod_user,  self.vod_password)
+            if(content_type != "video/mp4"):
+                # No vod selected and link isnt mp4 file
+                QMessageBox.warning(self, "VoD Slicer", f"Invalid VoD URL\n\nURL is not link to a directory listing or direct mp4 file")
+                return
+        self.vod_url = vod_url
+
+        # Get clip name and save location
         clip_name = self.clip_name_edit.text().strip()
         if(len(clip_name) == 0):
             clip_name = "clip.mp4"
@@ -204,17 +253,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         if(len(split)>0):
             self.previous_save_dir = split[0]
             self.settings.setValue("VodSlicer/previous_save_dir", self.previous_save_dir)
-        vod_name = self.get_selected_vod()
-        vod_url = None
-        for ind in self.index:
-            if(ind["name"] == vod_name):
-                vod_url = ind["link"]
-                break
-        if(vod_url is None):
-            return
-        self.vod_url = vod_url
-        self.vod_user = self.user_edit.text().strip()
-        self.vod_password = self.password_edit.text()
+        
         start = self.start_time_edit.text().strip()
         end = self.end_time_edit.text().strip()
         self.progress_dialog = ProgressDialog()
@@ -239,6 +278,11 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
             QMessageBox.information(self, "VodSlicer Done", f"{msg}")
         else:
             QMessageBox.critical(self, "VodSlicer Failed", f"{msg}")
+
+    def set_status(self, msg, timeout=0):
+        if(timeout==0):
+            self.status_msg = msg
+        self.status_bar.showMessage(msg, timeout)
 
     def closeEvent(self, evt):
         self.settings.setValue("VodSlicer/vod_url", self.vod_url_edit.text().strip())

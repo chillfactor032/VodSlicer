@@ -11,7 +11,6 @@ This version of VodSlicer also supports searching local directories for mp4 file
 
 ![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer2.png "Vod Slicer")
 <figcaption align = "center"><b>Fig 2: Viewing a local directory</b></figcaption>
-<br>
 
 Select the VoD that contains the clip you want. Enter the start time and end time of the part of the VoD you wish to extract. This is also a good time to give the clip a name. With these set, click "Slice" to start the extraction process.
 
@@ -24,8 +23,8 @@ For mp4 video's hosted on servers that support the HTML5 `Range` header, a user 
 Remember though that mp4 is a container format, which means that simply pulling data out of the middle of the video will result in a corrupted file. 
 
 ![MP4 Container Structure](https://chillaspect.com/images/mp4_structure2.png "MP4 Container Structure")
-<figcaption align = "center"><b>Fig 3: MP4 Container Structure</b></figcaption>
-<br>
+<figcaption align = "center"><b>Fig 3: MP4 Container Structure</b></figcaption>        
+
 This tool makes use of the [FFMPEG utility](https://ffmpeg.org/about.html) to take the chunk of data and rebuild the structure of the mp4 file so it will be playable.
 
 ## Releases

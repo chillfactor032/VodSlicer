@@ -1,16 +1,16 @@
 # VodSlicer
 This is a Windows 64 bit application that extracts subclips of mp4 videos hosted on a remote server. This is very useful when the files are so large they take a long time to download. 
 
-![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer3.png "Vod Slicer")
-<figcaption align = "center"><b>Fig 1: VodSlicer GUI Overview</b></figcaption>
+![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer3.png "VodSlicer GUI Overview")
+
 
 ## Usage
 
 To use VodSlicer, find the URL to the directory listing of the mp4 files you want to explore. If this link requires a username and password specify them in the settings. Once the URL and username and password are set, click "Refresh" icon button to view the directory listing in the VoD explorer. 
 This version of VodSlicer also supports searching local directories for mp4 files. Click the "Folder" icon button to select a directory and VodSlicer will display all the mp4 files.
 
-![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer2.png "Vod Slicer")
-<figcaption align = "center"><b>Fig 2: Viewing a local directory</b></figcaption>
+![Vod Slicer Screenshot](https://chillaspect.com/images/vodslicer2.png "Viewing a local directory")
+
 
 Select the VoD that contains the clip you want. Enter the start time and end time of the part of the VoD you wish to extract. This is also a good time to give the clip a name. With these set, click "Slice" to start the extraction process.
 
@@ -23,7 +23,7 @@ For mp4 video's hosted on servers that support the HTML5 `Range` header, a user 
 Remember though that mp4 is a container format, which means that simply pulling data out of the middle of the video will result in a corrupted file. 
 
 ![MP4 Container Structure](https://chillaspect.com/images/mp4_structure2.png "MP4 Container Structure")
-<figcaption align = "center"><b>Fig 3: MP4 Container Structure</b></figcaption>        
+
 
 This tool makes use of the [FFMPEG utility](https://ffmpeg.org/about.html) to take the chunk of data and rebuild the structure of the mp4 file so it will be playable.
 

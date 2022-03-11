@@ -1,3 +1,4 @@
+from genericpath import isfile
 import sys
 import json
 import os
@@ -81,6 +82,9 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         reload_icon_pixmap = QStyle.StandardPixmap.SP_BrowserReload
         reload_icon = self.style().standardIcon(reload_icon_pixmap)
         self.save_button.setIcon(reload_icon)
+        file_icon_pixmap = QStyle.StandardPixmap.SP_DirOpenIcon
+        file_icon = self.style().standardIcon(file_icon_pixmap)
+        self.open_file_button.setIcon(file_icon)
 
         #Set window Icon
         default_icon_pixmap = QStyle.StandardPixmap.SP_FileDialogListView
@@ -98,6 +102,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.slice_button.clicked.connect(self.click_slice_button)
         self.about_button.clicked.connect(self.show_about)
         self.github_button.clicked.connect(self.show_github)
+        self.open_file_button.clicked.connect(self.click_open_button)
 
 
         # Add Context Menu
@@ -119,6 +124,13 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         if(geometry and window_state):
             self.restoreGeometry(geometry) 
             self.restoreState(window_state)
+
+    def click_open_button(self):
+        dir = QFileDialog.getExistingDirectory(self, "Open MP4 Directory", self.documents_dir, QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks)
+        dir = dir.strip()
+        if(os.path.isdir(dir)):
+            self.vod_url_edit.setText(dir)
+            self.refresh()
 
     def show_github(self):
         QDesktopServices.openUrl(QUrl("https://github.com/chillfactor032/VodSlicer"))
@@ -168,59 +180,96 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
             return
         index = []
         r = None
-        try:
-            content_type = self.get_content_type(url, user, password)
-            if(content_type == "video/mp4"):
-                self.set_status(f"Direct mp4 URL Saved")
+        local_file = True
+        if(len(url) >= 4 and url[:4].lower() == "http"):
+            try:
+                content_type = self.get_content_type(url, user, password)
+                if(content_type == "video/mp4"):
+                    self.set_status(f"Direct mp4 URL Saved")
+                    return
+                elif(content_type != "text/html"):
+                    self.set_status(f"Invalid URL", 5000)
+                    return
+
+                # If content type is html, determin if its a directory listing
+                if(len(user)==0 and len(password)==0):
+                    r = requests.get(url)
+                else:
+                    r = requests.get(url, auth=requests.auth.HTTPBasicAuth(user, password))
+                r.raise_for_status()
+            except (requests.exceptions.MissingSchema, requests.exceptions.ConnectionError) as err:
+                QMessageBox.warning(self, "VoD Slicer", f"Could not request VoDs\n\n{repr(err)}")
                 return
-            elif(content_type != "text/html"):
-                self.set_status(f"Invalid URL", 5000)
+            except requests.HTTPError as err:
+                QMessageBox.warning(self, "VoD Slicer", f"HTTP Error\n\n{str(err)}")
                 return
 
-            # If content type is html, determin if its a directory listing
-            if(len(user)==0 and len(password)==0):
-                r = requests.get(url)
+            # Content is html and we successfully have response
+            index_raw = r.text
+
+            if("Index of" not in index_raw):
+                QMessageBox.warning(self, "VoD Slicer", f"URL does not appear to be a directory listing or mp4 file.\n\nEnsure the URL is of the VoD direcoty listing, or an mp4 file.")
+                return
+
+            index_lines = r.text.splitlines()
+            for line in index_lines:
+                regex = re.findall(r'<a href="(.+?)">', line)
+                if(regex and len(regex)>0):
+                    link = regex[0]
+                    name = urllib.parse.unquote(link)
+                    if(name[-4:]!=".mp4"):
+                        continue
+                    index.append({"link":f"{url}{link}", "name":name})
+            index.reverse()
+            self.index = index
+            self.vod_list_model.clear()
+            for index in self.index:
+                item = QStandardItem(index["name"])
+                self.vod_list_model.appendRow(item)
+            if(self.vod_list_model.rowCount()>0):
+                i = self.vod_list_model.index(0, 0)
+                self.vod_list_view.setCurrentIndex(i)
+        else:
+            if(os.path.exists(url)):
+                #Pass Exists: File or Dir?
+                if(os.path.isdir(url)):
+                    # Is Directory
+                    index = []
+                    for file in os.listdir(url):
+                        if file.endswith(".mp4"):
+                            link = os.path.join(url, file).replace("\\", "/")
+                            index.append({"link": link, "name": file})
+                    self.index = index
+                    self.vod_list_model.clear()
+                    for index in self.index:
+                        item = QStandardItem(index["name"])
+                        self.vod_list_model.appendRow(item)
+                    if(self.vod_list_model.rowCount()>0):
+                        i = self.vod_list_model.index(0, 0)
+                        self.vod_list_view.setCurrentIndex(i)
+                elif(os.path.isfile(url)):
+                    #Its a file
+                    if(len(url)>=4 and url[-4:].lower() == ".mp4"):
+                        #Looks like an MP4
+                        self.set_status("Local MP4 File Loaded")
+                    else:
+                        self.set_status("Unsupported file type", 5000)
+                else:
+                    self.set_status("Unsupported file type", 5000)
             else:
-                r = requests.get(url, auth=requests.auth.HTTPBasicAuth(user, password))
-            r.raise_for_status()
-        except (requests.exceptions.MissingSchema, requests.exceptions.ConnectionError) as err:
-            QMessageBox.warning(self, "VoD Slicer", f"Could not request VoDs\n\n{repr(err)}")
-            return
-        except requests.HTTPError as err:
-            QMessageBox.warning(self, "VoD Slicer", f"HTTP Error\n\n{str(err)}")
-            return
-
-        # Content is html and we successfully have response
-        index_raw = r.text
-
-        if("Index of" not in index_raw):
-            QMessageBox.warning(self, "VoD Slicer", f"URL does not appear to be a directory listing or mp4 file.\n\nEnsure the URL is of the VoD direcoty listing, or an mp4 file.")
-            return
-
-        index_lines = r.text.splitlines()
-        for line in index_lines:
-            regex = re.findall(r'<a href="(.+?)">', line)
-            if(regex and len(regex)>0):
-                link = regex[0]
-                name = urllib.parse.unquote(link)
-                if(name[-4:]!=".mp4"):
-                    continue
-                index.append({"link":f"{url}{link}", "name":name})
-        index.reverse()
-        self.index = index
-        self.vod_list_model.clear()
-        for index in self.index:
-            item = QStandardItem(index["name"])
-            self.vod_list_model.appendRow(item)
-        if(self.vod_list_model.rowCount()>0):
-            i = self.vod_list_model.index(0, 0)
-            self.vod_list_view.setCurrentIndex(i)
+                self.set_status("Path does not exist", 5000)
 
     def click_slice_button(self):
         content_type = ""
         # Read User and Password
         self.vod_user = self.user_edit.text().strip()
         self.vod_password = self.password_edit.text()
+
+        if(len(self.vod_user)==0):
+            self.vod_user = None
+
+        if(len(self.vod_password)==0):
+            self.vod_password = None
 
         # Determin if link from VoD explorer or direct mp4 file
         vod_name = self.get_selected_vod()
@@ -231,12 +280,18 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
                 break
         if(vod_url is None):
             vod_url = self.vod_url_edit.text().strip()
-            content_type = self.get_content_type(vod_url, self.vod_user,  self.vod_password)
-            if(content_type != "video/mp4"):
-                # No vod selected and link isnt mp4 file
-                QMessageBox.warning(self, "VoD Slicer", f"Invalid VoD URL\n\nURL is not link to a directory listing or direct mp4 file")
-                return
+            if(vod_url.startswith("http")):
+                content_type = self.get_content_type(vod_url, self.vod_user,  self.vod_password)
+                if(content_type != "video/mp4"):
+                    # No vod selected and link isnt mp4 file
+                    QMessageBox.warning(self, "VoD Slicer", f"Invalid VoD URL\n\nURL is not link to a directory listing or direct mp4 file")
+                    return
         self.vod_url = vod_url
+
+        if(self.vod_url.startswith("http") == False):
+            #If its a local file, set username and password to None
+            self.vod_user = None
+            self.vod_password = None
 
         # Get clip name and save location
         clip_name = self.clip_name_edit.text().strip()
@@ -270,12 +325,24 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
     def vodslicer_progress(self, progress_dict):
         self.progress_dialog.update_progress(progress_dict)
 
-    def vodslicer_done(self, result, msg):
+    def vodslicer_done(self, result, msg, file=None):
         self.progress_dialog.finish()
         self.save_button.setEnabled(True)
         self.slice_button.setEnabled(True)
         if(result):
-            QMessageBox.information(self, "VodSlicer Done", f"{msg}")
+            if(file is None):
+                QMessageBox.information(self, "VodSlicer Done", f"{msg}")
+            else:
+                if(os.path.isfile(file)):
+                    choice = QMessageBox.information(self, 
+                        "VodSlicer Done", 
+                        f"{msg}\n\nWould you like to open the clip location?",
+                        (QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No),
+                        QMessageBox.StandardButton.No)
+                if(choice == QMessageBox.StandardButton.Yes):
+                    dir = os.path.dirname(file)
+                    if(os.path.isdir(dir)):
+                        os.startfile(dir)
         else:
             QMessageBox.critical(self, "VodSlicer Failed", f"{msg}")
 
@@ -292,12 +359,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.settings.setValue("VodSlicer/windowState", self.saveState())
         self.settings.sync()
 
-
-
 class VodSlicer(QRunnable):
 
     class Signals(QObject):
-        done = Signal(bool, str)
+        done = Signal(bool, str, str)
         progress = Signal(dict)
 
     def __init__(self, ffmpeg_path, url, user, password, start, end, outfile_path, md5hash):
@@ -407,7 +472,7 @@ class VodSlicer(QRunnable):
             return
         else:
             if(process.returncode == 0):
-                self.done(True, "Slicing Successful")
+                self.done(True, "Slicing Successful", self.output_file)
             else:
                 print(self.output)
                 self.done(False, f"FFMPEG exe error, Invalid URL?\n\n FFMPEG Return Code: {process.returncode}")
@@ -445,8 +510,8 @@ class VodSlicer(QRunnable):
         progress_dict["status"] = "Extracting video data"
         self.signals.progress.emit(progress_dict)
 
-    def done(self, result, msg):
-        self.signals.done.emit(result, msg)
+    def done(self, result, msg, file=None):
+        self.signals.done.emit(result, msg, file)
 
 
 class ProgressDialog(QDialog):

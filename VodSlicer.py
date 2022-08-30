@@ -32,7 +32,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         version_file_text = text_stream.readAll()
         self.version_dict = json.loads(version_file_text)
         self.version = self.version_dict["version"]
-
+        self.os = "win"
         ## Get Directories to Store Files
         self.temp_dir = os.path.join(QStandardPaths.writableLocation(QStandardPaths.TempLocation), "VodSlicer").replace("\\", "/")
         self.config_dir = QStandardPaths.writableLocation(QStandardPaths.ConfigLocation)
@@ -48,7 +48,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         if "macOS" in platform.platform(terse=1):
             #Mac Detected
             ffmpeg_filename = "ffmpeg"
-            print("MacOS Detected")
+            self.os = "mac"
         self.ffmpeg_path = os.path.join(self.config_dir, ffmpeg_filename).replace("\\", "/")
         self.ffmpeg_md5 = ""
         if(os.path.exists(self.ffmpeg_path)==False):
@@ -318,7 +318,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         start = self.start_time_edit.text().strip()
         end = self.end_time_edit.text().strip()
         self.progress_dialog = ProgressDialog()
-        self.vodslicer = VodSlicer(self.ffmpeg_path, self.vod_url, self.vod_user, self.vod_password, start, end, filename, self.ffmpeg_md5)
+        self.vodslicer = VodSlicer(self.ffmpeg_path, self.vod_url, self.vod_user, self.vod_password, start, end, filename, self.ffmpeg_md5, self.os)
         self.vodslicer.signals.done.connect(self.vodslicer_done)
         self.vodslicer.signals.progress.connect(self.vodslicer_progress)
         self.save_button.setEnabled(False)
@@ -371,7 +371,7 @@ class VodSlicer(QRunnable):
         done = Signal(bool, str, str)
         progress = Signal(dict)
 
-    def __init__(self, ffmpeg_path, url, user, password, start, end, outfile_path, md5hash):
+    def __init__(self, ffmpeg_path, url, user, password, start, end, outfile_path, md5hash, os):
         super(VodSlicer, self).__init__()
         self.signals = self.Signals()
         self.ffmpeg_binary_path = ffmpeg_path
@@ -381,6 +381,7 @@ class VodSlicer(QRunnable):
         self._abort = False
         self.md5hash = md5hash
         self.output = ""
+        self.os = os
 
     def set_output_file(self, outfile):
         self.output_file = outfile
@@ -454,9 +455,12 @@ class VodSlicer(QRunnable):
         self.signals.progress.emit(progress_dict)
 
         # Run FFMPEG To extract video data from timestamps
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdin=subprocess.PIPE, startupinfo=si)
+        if self.os == "win":
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdin=subprocess.PIPE, startupinfo=si)
+        else:
+            process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
         process.stdin.write("?q".encode("utf-8"))
         chunk = ""
         while process.poll() is None:

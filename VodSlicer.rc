@@ -2,6 +2,7 @@
 <RCC version="1.0">
     <qresource>
         <file>resources/img/vod_slicer.ico</file>
+        <file>resources/img/vod_slicer.icns</file>
         <file>resources/files/ffmpeg-win64.exe</file>
         <file>resources/files/ffmpeg</file>
         <file>version.json</file>

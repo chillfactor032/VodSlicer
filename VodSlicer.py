@@ -9,6 +9,7 @@ import subprocess
 import time
 import hashlib
 import platform
+import stat
 
 # PySide6 Imports
 from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QMenu

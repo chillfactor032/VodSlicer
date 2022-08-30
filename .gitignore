@@ -5,6 +5,7 @@ VodSlicer.onefile-build/*
 vodslicer
 Resources.py
 UI_Components.py
+.DS_Store
 
 *.bak
 

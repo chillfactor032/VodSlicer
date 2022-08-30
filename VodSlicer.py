@@ -8,6 +8,7 @@ import urllib
 import subprocess
 import time
 import hashlib
+import platform
 
 # PySide6 Imports
 from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QMenu
@@ -36,17 +37,22 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
         self.temp_dir = os.path.join(QStandardPaths.writableLocation(QStandardPaths.TempLocation), "VodSlicer").replace("\\", "/")
         self.config_dir = QStandardPaths.writableLocation(QStandardPaths.ConfigLocation)
         self.documents_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-
+        print(self.config_dir)
         # Create config directory if it doesnt exist
         if(not os.path.isdir(self.config_dir)):
             os.makedirs(self.config_dir, exist_ok=True)
         self.ini_path = os.path.join(self.config_dir, "VodSlicer.ini").replace("\\", "/")
 
         ## Copy FFMPEG to Local Config Dir
-        self.ffmpeg_path = os.path.join(self.config_dir, "ffmpeg-win64.exe").replace("\\", "/")
+        ffmpeg_filename = "ffmpeg-win64.exe"
+        if "macOS" in platform.platform(terse=1):
+            #Mac Detected
+            ffmpeg_filename = "ffmpeg"
+            print("MacOS Detected")
+        self.ffmpeg_path = os.path.join(self.config_dir, ffmpeg_filename).replace("\\", "/")
         self.ffmpeg_md5 = ""
         if(os.path.exists(self.ffmpeg_path)==False):
-            ffmpeg_file = QFile(":resources/files/ffmpeg-win64.exe")
+            ffmpeg_file = QFile(f":resources/files/{ffmpeg_filename}")
             ffmpeg_file.open(QFile.ReadOnly)
             data = ffmpeg_file.readAll()
             ffmpeg_bytes = data.data()

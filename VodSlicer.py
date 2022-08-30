@@ -69,7 +69,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
 
         #If OS not Windows, set ffmpeg binary as executable
         if self.os != "win":
-            os.chmod(self.ffmpeg_path, stat.S_IXUSR)
+            os.chmod(self.ffmpeg_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
 
         # Get Settings From Ini File
         self.settings = QSettings(self.ini_path, QSettings.IniFormat)

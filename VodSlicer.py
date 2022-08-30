@@ -353,7 +353,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
                 if(choice == QMessageBox.StandardButton.Yes):
                     dir = os.path.dirname(file)
                     if(os.path.isdir(dir)):
-                        os.startfile(dir)
+                        if self.os == "win":
+                            os.startfile(dir)
+                        else:
+                            subprocess.call(["open", dir])
         else:
             QMessageBox.critical(self, "VodSlicer Failed", f"{msg}")
 

@@ -3,6 +3,22 @@ import subprocess
 import shutil
 import sys
 import json
+import platform
+from enum import Enum, auto
+
+class OperatingSystem(Enum):
+    WINDOWS = auto()
+    MAC = auto()
+    LINUX = auto()
+
+platform_str = platform.platform()
+
+if "Windows" in platform_str:
+    target_env = OperatingSystem.WINDOWS
+elif "MacOS" in platform_str:
+    target_env = OperatingSystem.MAC
+else:
+    target_env = OperatingSystem.LINUX
 
 TEST_BUILD = False
 INPUT_FILE = "VodSlicer.py"
@@ -14,7 +30,6 @@ ui_path = os.path.join(cwd, "resources", "ui")
 destination_file = os.path.join(cwd, "UI_Components.py")
 resource_file = os.path.join(cwd, "VodSlicer.rc")
 dist_dir = os.path.join(cwd, "dist")
-target_env = "windows"
 partial = False
 
 if(len(sys.argv)>1):
@@ -49,7 +64,7 @@ def getFilesWithExtension(dir_path,  extension):
 # and place it in destination_path
 def compileUiFile(ui_file, destination_file):
     # uic -g python $ui_file >> destination_file
-    ret = subprocess.run(["uic", "-g", "python", ui_file], capture_output=True)
+    ret = subprocess.run(["pyside6-uic", "-g", "python", ui_file], capture_output=True)
     if(ret.returncode != 0):
         print(f"\nError Compiling {ui_file}")
         print(ret.stderr)
@@ -64,7 +79,7 @@ def compileUiFile(ui_file, destination_file):
 # and place it in destination_path
 def compileResources(resources_file, destination_file):
     #rcc -g python -o Resources.py LightPlanStudio.rc
-    ret = subprocess.run(["rcc", "-g", "python", "-o", destination_file, resources_file], capture_output=True)
+    ret = subprocess.run(["pyside6-rcc", "-g", "python", "-o", destination_file, resources_file], capture_output=True)
     stderr = ret.stderr.decode("utf-8")
     if(ret.returncode != 0):
         print(stderr)
@@ -117,7 +132,7 @@ if(partial):
 
 print("Compiling Binary")
 
-if(target_env == "windows"):
+if(target_env == OperatingSystem.WINDOWS):
     show_cmd = "--windows-disable-console "
     if(TEST_BUILD):
         show_cmd = ""
@@ -127,6 +142,8 @@ if(target_env == "windows"):
             f"{show_cmd}" \
             f" -o dist/{OUTPUT_FILE} " \
             f"{INPUT_FILE}"
+else:
+    cmd = "pyinstaller --onefile --windowed --name='VodSlicer' --icon='resources/img/vod_slicer.icns' VodSlicer.py"
     
 proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 for c in iter(lambda: proc.stdout.read(1), b''):

@@ -66,6 +66,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_MainWindow):
                 ffmpeg_bytes = f.read()    
                 self.ffmpeg_md5 = hashlib.md5(ffmpeg_bytes).hexdigest()
 
+        #If OS not Windows, set ffmpeg binary as executable
+        if self.os != "win":
+            os.chmod(self.ffmpeg_path, os.stat.S_IXUSR)
+
         # Get Settings From Ini File
         self.settings = QSettings(self.ini_path, QSettings.IniFormat)
         self.vod_url = self.settings.value("VodSlicer/vod_url", "")

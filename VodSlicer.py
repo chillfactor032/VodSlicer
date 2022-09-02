@@ -493,7 +493,7 @@ class VodSlicer(QRunnable):
                 self.done(True, "Slicing Successful", self.output_file)
             else:
                 print(self.output)
-                self.done(False, f"FFMPEG exe error, Invalid URL?\n\n FFMPEG Return Code: {process.returncode}")
+                self.done(False, f"FFMPEG error, Invalid URL?\n\n FFMPEG Return Code: {process.returncode}")
 
     def get_output(self):
         return self.output

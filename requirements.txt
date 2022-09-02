@@ -1,4 +1,5 @@
 PySide6
 zstandard
 requests
-nuitka
+pyinstaller; sys_platform == 'darwin'
+nuitka; sys_platform == 'win32'

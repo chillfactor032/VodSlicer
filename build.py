@@ -11,18 +11,19 @@ class OperatingSystem(Enum):
     MAC = auto()
     LINUX = auto()
 
+TEST_BUILD = False
+INPUT_FILE = "VodSlicer.py"
+OUTPUT_FILE = "VodSlicer"
+
 platform_str = platform.platform()
 
 if "Windows" in platform_str:
     target_env = OperatingSystem.WINDOWS
+    OUTPUT_FILE += ".exe"
 elif "MacOS" in platform_str:
     target_env = OperatingSystem.MAC
 else:
     target_env = OperatingSystem.LINUX
-
-TEST_BUILD = False
-INPUT_FILE = "VodSlicer.py"
-OUTPUT_FILE = "VodSlicer.exe"
 
 # Specify Paths and Files
 cwd = os.getcwd()
@@ -36,16 +37,61 @@ if(len(sys.argv)>1):
     if(sys.argv[1] == "partial"):
         partial = True
 
-print("Building VodSlicer")
-print(f"Test Build: {TEST_BUILD}")
-print(f"Target Env: {target_env}")
-print("Reading Version File: version.json")
+# Print data about the build
+if partial:
+    print("Building VodSlicer: Partial Build")
+else:
+    print("Building VodSlicer")
+print("=============================================\n")
+print(f"> Target Env: {target_env}")
+print("> Reading Version File: version.json")
 with open("version.json", "r") as version_file:
     version = json.load(version_file)
-print(f"Company Name: {version['company_name']}")
-print(f"Product Name: {version['product_name']}")
-print(f"Product Ver: {version['version']}")
-print()
+print(f"> Company Name: {version['company_name']}")
+print(f"> Product Name: {version['product_name']}")
+print(f"> Product Ver: {version['version']}")
+print("=============================================\n")
+print("Checking paths for required executables...")
+
+python_dir = os.path.dirname(sys.executable)
+compiler_path = ""
+compiler_name = ""
+rcc_exe_name = "pyside6-rcc"
+uic_exe_name = "pyside6-rcc"
+if target_env == OperatingSystem.WINDOWS:
+    python_bin_dir = os.path.join(python_dir, "Scripts")
+    compiler_path = os.path.join(python_bin_dir, "nuitka.bat")
+    compiler_name = "nuitka"
+    rcc_exe_name += ".exe"
+    uic_exe_name += ".exe"
+else:
+    # Mac or Linux
+    python_bin_dir = os.path.join(python_dir, "bin")
+    compiler_name = "pyinstaller"
+    compiler_path = os.path.join(python_bin_dir, "pyinstaller")
+
+if os.path.exists(os.path.join(python_bin_dir, uic_exe_name)):
+    print("> pyside6-uic... Found!")
+else:
+    print(f"> pyside6-uic... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
+    print(python_bin_dir)
+    print("Aborting build")
+    sys.exit(1)
+if os.path.exists(os.path.join(python_bin_dir, rcc_exe_name)):
+    print("> pyside6-rcc... Found!")
+else:
+    print(f"> pyside6-rcc... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
+    print(python_bin_dir)
+    print("Aborting build")
+    sys.exit(1)
+if compiler_path:
+    print(f"> {compiler_name}... Found!")
+else:
+    print(f"> {compiler_name}... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
+    print(python_bin_dir)
+    print("Aborting build")
+    sys.exit(1)
+print("=============================================\n")
 
 # Create dist directory if it doesnt exist
 if(not os.path.isdir(dist_dir)):
@@ -87,42 +133,45 @@ def compileResources(resources_file, destination_file):
     return True
     
 print("Compiling All UI Files to Single Python File")
-print(f"UI File Dir: {ui_path}")
-print(f"Destination Python File: {destination_file}")
+print(f"> UI File Dir:\n\t{ui_path}")
+print(f"> Destination Python File:\n\t{destination_file}")
 
 if(os.path.exists(destination_file)):
-    print("Existing Destination File Found")
+    print("\n> Existing Destination File Found")
     destination_file_bak = destination_file + ".bak"
-    print(f"Making Backup: {destination_file_bak}")
+    print(f"> Making Backup:\n\t{destination_file_bak}")
     try:
         shutil.copyfile(destination_file, destination_file_bak)
         print("\tFile Backup Success")
     except Exception as e:
-        print("Error Making Backup File")
+        print("\tError Making Backup File")
         print(e)
         print("Quitting...")
         sys.exit(1)
-    print("Removing Old Destination File")
+    print("\tRemoving Old Destination File")
     os.remove(destination_file)
-print("=============================================\n")
+
 ui_files = getFilesWithExtension(ui_path, "ui")
 for file in ui_files:
-    print(f"Compiling {file}...", end="")
+    print(f"> Compiling {file}...", end="")
     if(compileUiFile(file, destination_file)):
-        print("Success")
+        print(" Success")
     else:
-        print("Failure")
+        print(" Failure")
 
-print("\nUI Files Compiled")
+print("\n> UI Files Compiled Successfully")
 print("=============================================\n")
-print("Compiling Resources")
 
 resource_dest = "Resources.py"
+print("Compiling Resources")
+print(f"> Target Resources file: {resource_dest}")
+
 if(compileResources(resource_file, resource_dest)):
-    print(f"Compiling Resources File: {resource_file} to {resource_dest}")
+    print(f"> {resource_file}... Success")
 else:
     print(f"\nError Compiling {resource_file}")
-
+    print("Aborting build")
+    sys.exit(1)
 print("=============================================\n")
 
 if(partial):

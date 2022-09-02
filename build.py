@@ -66,7 +66,7 @@ if target_env == OperatingSystem.WINDOWS:
     uic_exe_name += ".exe"
 else:
     # Mac or Linux
-    python_bin_dir = os.path.join(python_dir, "bin")
+    python_bin_dir = python_dir
     compiler_name = "pyinstaller"
     compiler_path = os.path.join(python_bin_dir, "pyinstaller")
 

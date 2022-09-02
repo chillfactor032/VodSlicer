@@ -33,13 +33,25 @@ _The easiest way to get started using VodSlicer is to download the latest releas
 
 ## Build From Source
 
-To build this project from source, Windows 64 bit OS and python 3.9+, and is required.
+You build steps may vary slightly based on your OS.
+
+### Windows ###
+This project has only been tested on Windows 10 and python 3.9+. 
+
+Follow the below steps to build VoDSlicer on Windows.
 
 First clone the repository and enter the directory:
 
 ```bash
 git clone https://github.com/chillfactor032/VodSlicer.git
 cd VodSlicer
+``` 
+
+It's a good idea to create a virtual environment to avoid clashes with other projects. 
+
+```bash
+py -m venv venv
+.\venv\Scripts\activate.bat
 ```
 
 Install all of the dependencies with pip:
@@ -56,11 +68,46 @@ py build.py
 
 Now execute `dist/VodSlicer.exe` to run the application.
 
+### MacOS ###
+
+This project has only been tested on MacOS Catalina and python 3.9+. 
+
+Follow the below steps to build VoDSlicer on MacOS.
+
+First clone the repository and enter the directory:
+
+```bash
+git clone https://github.com/chillfactor032/VodSlicer.git
+cd VodSlicer
+``` 
+
+It's a good idea to create a virtual environment to avoid clashes with other projects. 
+
+```bash
+python3 -m venv venv
+source venv\bin\activate
+```
+
+Install all of the dependencies with pip:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Compile VodSlicer.py using [PyInstaller](https://pyinstaller.org/en/stable/) python compiler. This will create the executable VodSlicer.app in the `dist` directory. Note that you can issue `py build.py partial` to build the Qt resources file and UI files, but not compile the binary.
+
+```bash
+py build.py
+```
+
+Now execute `dist/VodSlicer.app` to run the application.
+
+
 ### Donations
 
-VodSlicer is provided free and without warranty. If you feel compelled to donated here are my crypto addresses below.
+VodSlicer is provided free and without warranty. If you feel compelled to donate here are my crypto addresses below.
 
-Coin | Address
+**Coin** | **Address**
 --- | ---
 BTC | 3C7UT1a2Do3LxFvxZt88S7gsNkRyRKXYCw
 ETH | 0xc24Fc5E6C2b3E1e1eaE62f59Fab8cFBC87b1FEfc
@@ -68,4 +115,4 @@ LTC | MViPMqjn2kdMwbLAbYtgpgnHfzwwpbzUZQ
 
 ### Contact
 
-chill@chillaspect.com
+chill@lightplanstudio.com

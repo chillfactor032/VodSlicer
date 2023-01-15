@@ -37,7 +37,7 @@ The latest Windows Release can be found here: [VoD Slicer Windows](https://githu
 
 ### Mac Release ###
 
-The latest Mac Release can be found here: [VoD Slicer Mac](https://github.com/chillfactor032/VodSlicer/releases/tag/v1.0.4)
+The latest Mac Release can be found here: [VoD Slicer Mac](https://github.com/chillfactor032/VodSlicer/releases/tag/v1.0.5)
 
 ## Build From Source
 

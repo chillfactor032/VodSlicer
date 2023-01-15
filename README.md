@@ -29,7 +29,15 @@ This tool makes use of the [FFMPEG utility](https://ffmpeg.org/about.html) to ta
 
 ## Releases
 
-_The easiest way to get started using VodSlicer is to download the latest release executable and run it. Releases are located at this [link](https://github.com/chillfactor032/VodSlicer/releases)._
+_The easiest way to get started using VodSlicer is to download the latest release executable and run it. Releases are located at this [link](https://github.com/chillfactor032/VodSlicer/releases)._ I will also leave a shortcut below to the latest release for each platform.
+
+### Windows Release ###
+
+The latest Windows Release can be found here: [VoD Slicer Windows](https://github.com/chillfactor032/VodSlicer/releases/tag/v1.0.4)
+
+### Mac Release ###
+
+The latest Mac Release can be found here: [VoD Slicer Mac](https://github.com/chillfactor032/VodSlicer/releases/tag/v1.0.4)
 
 ## Build From Source
 

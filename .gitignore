@@ -4,6 +4,7 @@ VodSlicer.dist/*
 VodSlicer.onefile-build/*
 vodslicer
 Resources.py
+Resources_rc.py
 UI_Components.py
 .DS_Store
 

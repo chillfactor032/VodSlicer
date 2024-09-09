@@ -4,98 +4,147 @@ import shutil
 import sys
 import json
 import platform
-from enum import Enum, auto
+import argparse
 
-class OperatingSystem(Enum):
-    WINDOWS = auto()
-    MAC = auto()
-    LINUX = auto()
+help = """A build script to build and compile PySide6 applications.
+Default action is to simply build the PySide6 UI components and resources.
+Use --full flag if you want to compile the binary using PyInstaller.
+"""
 
-TEST_BUILD = False
-INPUT_FILE = "VodSlicer.py"
-OUTPUT_FILE = "VodSlicer"
+parser = argparse.ArgumentParser(description=help)
+parser.add_argument("--full", action="store_true", help="Perform full build + compile. Compiled app destination is ./dist")
 
-platform_str = platform.platform()
+args = parser.parse_args()
 
-if "Windows" in platform_str:
-    target_env = OperatingSystem.WINDOWS
-    OUTPUT_FILE += ".exe"
-elif "MacOS" in platform_str:
-    target_env = OperatingSystem.MAC
-else:
-    target_env = OperatingSystem.LINUX
+FULL_COMPILE = args.full
 
-# Specify Paths and Files
-cwd = os.getcwd()
-ui_path = os.path.join(cwd, "resources", "ui")
-destination_file = os.path.join(cwd, "UI_Components.py")
-resource_file = os.path.join(cwd, "VodSlicer.rc")
-dist_dir = os.path.join(cwd, "dist")
-partial = False
+# Indentify OS
+# 'Linux', 'Darwin', 'Java', 'Windows'
+OS_PLATFORM = platform.system()
 
-if(len(sys.argv)>1):
-    if(sys.argv[1] == "partial"):
-        partial = True
+VERSION_TEMPLATE = """{
+    "version": "1.0",
+    "ico": "./resources/img/<ICON>.png",
+    "company_name": "<COMPANY_NAME>",
+    "product_name": "<PROJECT_NAME>",
+    "description": "<PROJECT_DESCRIPTION>",
+    "main_script": "MainWindow.py"
+}
+"""
 
-# Print data about the build
-if partial:
-    print("Building VodSlicer: Partial Build")
-else:
-    print("Building VodSlicer")
-print("=============================================\n")
-print(f"> Target Env: {target_env}")
-print("> Reading Version File: version.json")
-with open("version.json", "r") as version_file:
-    version = json.load(version_file)
-print(f"> Company Name: {version['company_name']}")
-print(f"> Product Name: {version['product_name']}")
-print(f"> Product Ver: {version['version']}")
-print("=============================================\n")
-print("Checking paths for required executables...")
+RESOURCES_TEMPLATE = """<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>version.json</file>
+</qresource>
+</RCC>
+"""
 
-python_dir = os.path.dirname(sys.executable)
-compiler_path = ""
-compiler_name = ""
-rcc_exe_name = "pyside6-rcc"
-uic_exe_name = "pyside6-rcc"
-if target_env == OperatingSystem.WINDOWS:
-    python_bin_dir = os.path.join(python_dir, "Scripts")
-    compiler_path = os.path.join(python_bin_dir, "nuitka.bat")
-    compiler_name = "nuitka"
-    rcc_exe_name += ".exe"
-    uic_exe_name += ".exe"
-else:
-    # Mac or Linux
-    python_bin_dir = python_dir
-    compiler_name = "pyinstaller"
-    compiler_path = os.path.join(python_bin_dir, "pyinstaller")
+UI_TEMPPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>634</width>
+    <height>160</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <widget class="QLabel" name="label">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>20</y>
+      <width>441</width>
+      <height>16</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>UI Template - Replace this file with one from QT Designer</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_2">
+    <property name="geometry">
+     <rect>
+      <x>40</x>
+      <y>60</y>
+      <width>441</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Save the ui file to &lt;PROJECT_ROOT&gt;/resources/ui/</string>
+    </property>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>634</width>
+     <height>22</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
+"""
 
-if os.path.exists(os.path.join(python_bin_dir, uic_exe_name)):
-    print("> pyside6-uic... Found!")
-else:
-    print(f"> pyside6-uic... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
-    print(python_bin_dir)
-    print("Aborting build")
-    sys.exit(1)
-if os.path.exists(os.path.join(python_bin_dir, rcc_exe_name)):
-    print("> pyside6-rcc... Found!")
-else:
-    print(f"> pyside6-rcc... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
-    print(python_bin_dir)
-    print("Aborting build")
-    sys.exit(1)
-if compiler_path:
-    print(f"> {compiler_name}... Found!")
-else:
-    print(f"> {compiler_name}... Not in path! Please add the following path to your $PATH environment variable and rerun build.py")
-    print(python_bin_dir)
-    print("Aborting build")
-    sys.exit(1)
-print("=============================================\n")
+def make_dirs(path):
+    try:
+        if not os.path.exists(path):
+            print(f"Creating path {path}")
+            os.makedirs(path)
+    except Exception as e:
+        print("Error creating bin dir")
+        print(e)
 
-# Create dist directory if it doesnt exist
-if(not os.path.isdir(dist_dir)):
-    os.makedirs(dist_dir, exist_ok=True)
+
+
+def generateQRC(dest_qrc_path, src_dir):
+
+    print(f"Generating Resources.qrc from files in [{dest_qrc_path}]")
+    # Explicitly include version.json
+    qrc_comment = "<!-- This file is generated by build.py. Changes will be lost! -->\n"
+    qrc_begin = "<!DOCTYPE RCC><RCC version=\"1.0\">\n<qresource>\n"
+    qrc_end = "</qresource>\n</RCC>\n"
+    qrc_contents = "\t<file>version.json</file>\n"
+
+    for root, dirs, files in os.walk(src_dir):
+        for file in files:
+            entry = f"\t<file>{os.path.join(root, file)}</file>\n"
+            qrc_contents += entry
+    qrc_contents = qrc_comment + qrc_begin + qrc_contents + qrc_end
+    
+    try:
+        with open(dest_qrc_path, "w") as f:
+            f.write(qrc_contents)
+        return True
+    except Exception as e:
+        print("Error writing Resources.qrc:")
+        print(e)
+        return False
+
+# Function to compile the provided ui_file to py
+# and place it in destination_path
+def installRequirements(requirements_file="requirements.txt"):
+    # pip install -r requirements.txt
+    ret = subprocess.run(["py", "-m", "pip", "install", "-r", "requirements.txt"], capture_output=True)
+    if(ret.returncode != 0):
+        print(f"\nError")
+        print(ret.stderr.decode("utf-8"))
+        return False
+    output = ret.stdout.decode("utf-8")
+    return True
 
 # Function to find all files in dir_path 
 # with extension (not recursive)
@@ -110,10 +159,10 @@ def getFilesWithExtension(dir_path,  extension):
 # and place it in destination_path
 def compileUiFile(ui_file, destination_file):
     # uic -g python $ui_file >> destination_file
-    ret = subprocess.run(["pyside6-uic", "-g", "python", ui_file], capture_output=True)
+    ret = subprocess.run(["uic", "-g", "python", ui_file], capture_output=True)
     if(ret.returncode != 0):
         print(f"\nError Compiling {ui_file}")
-        print(ret.stderr)
+        print(ret.stderr.decode("utf-8"))
         return False
     output = ret.stdout
     with open(destination_file, "ab") as py_file:
@@ -124,88 +173,175 @@ def compileUiFile(ui_file, destination_file):
 # Function to compile the provided ui_file to py
 # and place it in destination_path
 def compileResources(resources_file, destination_file):
-    #rcc -g python -o Resources.py LightPlanStudio.rc
-    ret = subprocess.run(["pyside6-rcc", "-g", "python", "-o", destination_file, resources_file], capture_output=True)
+    if not os.path.exists(destination_file):
+        #Create the destination file if it doesnt exist
+        with open(destination_file, 'w') as fp:
+            pass
+
+    #rcc -g python -o Resources.py {PROJECT_NAME}.rc
+    ret = subprocess.run(["rcc", "-g", "python", "-o", destination_file, resources_file], capture_output=True)
     stderr = ret.stderr.decode("utf-8")
     if(ret.returncode != 0):
         print(stderr)
         return False
     return True
-    
+
+
+target_env = "windows"
+
+print("Starting build script")
+print("=============================================\n")
+if FULL_COMPILE:
+    print("Full Build + Compile requested. Output will be in ./dist")
+else:
+    print("Full Compile not requested. Only building UI and Resources.")
+
+print(f"Platform Identified: {OS_PLATFORM}")
+
+if not os.path.exists("version.json"):
+    print("version.json file does not exist. Generating template")
+    print("Complete this template before rerunning")
+    with open("version.json", "w") as f:
+        f.write(VERSION_TEMPLATE)
+    sys.exit(1)
+print("Reading Version File: version.json")
+with open("version.json", "r") as version_file:
+    version = json.load(version_file)
+MAIN_SCRIPT = version.get("main_script", None)
+if MAIN_SCRIPT is None:
+    print("Missing main_script from version.json! Exiting...")
+    sys.exit(1)
+print(f"Company Name: {version['company_name']}")
+print(f"Product Name: {version['product_name']}")
+print(f"Version: {version['version']}")
+print("=============================================\n")
+
+PROJECT_NAME = version['product_name'].title().replace(" ","")
+OUTPUT_FILE = version.get("executable", "")
+if len(OUTPUT_FILE) == 0:
+    OUTPUT_FILE = PROJECT_NAME
+                          
+# Specify Paths and Files
+cwd = os.getcwd()
+ui_path = os.path.join(cwd, "resources", "ui")
+destination_file = os.path.join(cwd, "ui.py")
+resource_file = os.path.join(cwd, f"Resources.qrc")
+
+
+print("Installing Requirements via pip:")
+with open("requirements.txt") as f:
+    r = f.read()
+    print(r)
+
+if installRequirements():
+    print("Packages installed successfully")
+else:
+    print("Error installing packages from requirements.txt")
+    print("Try installing manually 'py -m pip install -r requirements.txt'")
+    sys.exit(1)
+print("=============================================\n")
+
+print("Checking required directories:")
+print("resources/ui")
+print("resources/files")
+print("resources/img")
+
+
+# Make sure resources directories exist, create them if not
+make_dirs("resources/ui")
+make_dirs("resources/files")
+make_dirs("resources/img")
+
+print("=============================================\n")
 print("Compiling All UI Files to Single Python File")
-print(f"> UI File Dir:\n\t{ui_path}")
-print(f"> Destination Python File:\n\t{destination_file}")
+print(f"UI File Dir: {ui_path}")
+print(f"Destination Python File: {destination_file}")
 
 if(os.path.exists(destination_file)):
-    print("\n> Existing Destination File Found")
+    print("Existing Destination File Found")
     destination_file_bak = destination_file + ".bak"
-    print(f"> Making Backup:\n\t{destination_file_bak}")
+    print(f"Making Backup: {destination_file_bak}")
     try:
         shutil.copyfile(destination_file, destination_file_bak)
         print("\tFile Backup Success")
     except Exception as e:
-        print("\tError Making Backup File")
+        print("Error Making Backup File")
         print(e)
         print("Quitting...")
         sys.exit(1)
-    print("\tRemoving Old Destination File")
+    print("Removing Old Destination File")
     os.remove(destination_file)
+print("=============================================\n")
 
+print("Compiling UI Files from ./resources/ui/")
 ui_files = getFilesWithExtension(ui_path, "ui")
+#If no ui files, create the blank one
+if len(ui_files) == 0:
+    with open("resources/ui/template.ui", "w") as f:
+        f.write(UI_TEMPPLATE)
+    ui_files = ["resources/ui/template.ui"]
+
 for file in ui_files:
     print(f"> Compiling {file}...", end="")
     if(compileUiFile(file, destination_file)):
-        print(" Success")
+        print("Success")
     else:
-        print(" Failure")
+        print("Failure")
+        print("Error compiling UI File. Please fix and rerun.")
+        sys.exit(1)
 
-print("\n> UI Files Compiled Successfully")
+print("\nUI Files Compiled")
 print("=============================================\n")
-
-resource_dest = "Resources.py"
 print("Compiling Resources")
-print(f"> Target Resources file: {resource_dest}")
 
+#Create Resources.qrc if it doesn't exist
+generateQRC(resource_file, "resources")
+
+resource_dest = "Resources_rc.py"
 if(compileResources(resource_file, resource_dest)):
-    print(f"> {resource_file}... Success")
+    print(f"> File: {resource_file} to {resource_dest}")
 else:
     print(f"\nError Compiling {resource_file}")
-    print("Aborting build")
-    sys.exit(1)
+
 print("=============================================\n")
 
-if(partial):
-    print("Partial Build Requested. Not Compiling Binary")
+if not FULL_COMPILE:
+    print("Build Only Requested. Not Compiling Binary")
     print("=============================================\n")
     sys.exit(0)
 
 print("Compiling Binary")
 
-if(target_env == OperatingSystem.WINDOWS):
-    show_cmd = "--windows-disable-console "
-    if(TEST_BUILD):
-        show_cmd = ""
-        
-    cmd = f"py -m nuitka --onefile --standalone " \
-            f"--enable-plugin=pyside6,numpy --windows-icon-from-ico={version['ico']} " \
-            f"{show_cmd}" \
-            f" -o dist/{OUTPUT_FILE} " \
-            f"{INPUT_FILE}"
-else:
-    cmd = "pyinstaller --onefile --windowed --name='VodSlicer' --icon='resources/img/vod_slicer.icns' VodSlicer.py"
-    
-proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-for c in iter(lambda: proc.stdout.read(1), b''):
-    sys.stdout.write(c.decode("utf-8"))
-    
-for c in iter(lambda: proc.stderr.read(1), b''):
-    sys.stdout.write(c.decode("utf-8"))
+# If windows, append exe file ext
+if OS_PLATFORM.lower() == "windows":
+    OUTPUT_FILE += ".exe"
 
-proc.communicate()
+ICON = version.get("ico", None)
+if ICON is None:
+    ICON = ""
+else:
+    if not os.path.isfile(ICON):
+        print(f"Icon file does not exist. Please copy it to path [{ICON}] and retry.")
+        sys.exit(1)
+    ICON = f" --icon={ICON}"
+#pyinstaller MainWindow.py -y --clean --onedir -n MyAppTemplate --icon=app.ico
+cmd = f"pyinstaller {MAIN_SCRIPT} -w -y --clean --onefile" \
+        f" -n {OUTPUT_FILE}" \
+        f"{ICON}"
+
+print("Compiling with command:")
+print(cmd)
+print()
+
+proc = subprocess.run(cmd, shell=True, capture_output=True)
+print(proc.stdout.decode("utf8"))
+print(proc.stderr.decode("utf8"))
+print(f"Return Code: {proc.returncode}")
 
 print("\n=============================================")
 if(proc.returncode == 0):
     print("Binary Compiled Successfully")
+    print(f"./dist/{OUTPUT_FILE}")
 else:
     print("Error Compiling Binary")
 print("=============================================\n")

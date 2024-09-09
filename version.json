@@ -1,7 +1,8 @@
 {
-    "version": "1.0.5",
+    "version": "2.0.0",
     "ico": "./resources/img/vod_slicer.ico",
     "company_name": "ChillAspect",
     "product_name": "VodSlicer",
-    "description": "Slice'n dice those VoDs (without downloading them)"
+    "description": "Slice'n dice those VoDs (without downloading them)",
+    "main_script": "VodSlicer.py"
 }

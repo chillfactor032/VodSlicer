@@ -93,16 +93,26 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.progress_dialog = ProgressDialog(self)
         self.permanent_status_label = QLabel()
         self.statusbar.addPermanentWidget(self.permanent_status_label)
+        self.seek_left_button = HoldButton(parent=self)
+        #self.seek_left_button.setFixedSize(QSize(50,35))
+        self.seek_left_button.setFixedSize(QSize(40,35))
+        self.seek_left_button.setIconSize(QSize(24,24))
         self.rewind_button = HoldButton(parent=self)
         self.rewind_button.setFixedSize(QSize(50,35))
         self.rewind_button.setIconSize(QSize(24,24))
         self.forward_button = HoldButton(parent=self)
         self.forward_button.setFixedSize(QSize(50,35))
         self.forward_button.setIconSize(QSize(24,24))
+        self.seek_right_button = HoldButton(parent=self)
+        #self.seek_right_button.setFixedSize(QSize(50,35))
+        self.seek_right_button.setFixedSize(QSize(40,35))
+        self.seek_right_button.setIconSize(QSize(24,24))
         self.video_controls_widget.layout().removeWidget(self.play_button)
+        self.video_controls_widget.layout().addWidget(self.seek_left_button)
         self.video_controls_widget.layout().addWidget(self.rewind_button)
         self.video_controls_widget.layout().addWidget(self.play_button)
         self.video_controls_widget.layout().addWidget(self.forward_button)
+        self.video_controls_widget.layout().addWidget(self.seek_right_button)
 
         #Get Icons
         default_icon_pixmap = QStyle.StandardPixmap.SP_FileDialogListView
@@ -118,6 +128,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.rewind_icon = QIcon(self.rewind_icon_pixmap)
         self.foward_icon_pixmap = QPixmap(":resources/img/fast-forward.svg")
         self.foward_icon = QIcon(self.foward_icon_pixmap)
+        self.seek_left_icon_pixmap = QPixmap(":resources/img/step_left.svg")
+        self.seek_left_icon = QIcon(self.seek_left_icon_pixmap)
+        self.seek_right_icon_pixmap = QPixmap(":resources/img/step_right.svg")
+        self.seek_right_icon = QIcon(self.seek_right_icon_pixmap)
         self.play_icon_pixmap = QPixmap(":resources/img/play.svg")
         self.pause_icon_pixmap = QPixmap(":resources/img/pause.svg")
         self.play_icon = QIcon(self.play_icon_pixmap)
@@ -130,8 +144,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         # Setup Video Player
         self.volume_slider.setValue(self.volume)
         self.play_button.setEnabled(False)
-        #self.rewind_button.setEnabled(False)
-        #self.forward_button.setEnabled(False)
+        self.rewind_button.setEnabled(False)
+        self.forward_button.setEnabled(False)
+        self.seek_left_button.setEnabled(False)
+        self.seek_right_button.setEnabled(False)
         self.save_clip_button.setEnabled(False)
         self.markers_button.setEnabled(False)
         self.audio_output = QAudioOutput()
@@ -153,14 +169,37 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.seek_position_frame = 0
         self.cur_video_source_url = ""
 
+        # How far to seek when clicking rewind buttons
+        self.seek_increments = [
+            {
+                "name": "1 Frame",
+                "ms": 42
+            },{
+                "name": "1 Second",
+                "ms": 1000
+            },{
+                "name": "5 Seconds",
+                "ms": 5000
+            },{
+                "name": "10 Seconds",
+                "ms": 10000
+            }
+        ]
+
+        # Start at 1 second increment
+        self.current_seek_increment = 1
+
         # Button Signals
         self.online_video_button.clicked.connect(self.online_video_clicked)
         self.local_video_button.clicked.connect(self.local_video_clicked)
         self.about_button.clicked.connect(self.show_about)
         self.clip_start_button.clicked.connect(self.clip_start_clicked)
         self.clip_end_button.clicked.connect(self.clip_end_clicked)
-        #self.rewind_button.clicked.connect(self.rewind_clicked)
         #self.forward_button.clicked.connect(self.forward_clicked)
+        self.seek_right_button.signals.rightclicked.connect(self.cycle_seek_interval)
+        self.seek_right_button.signals.leftclicked.connect(self.seek_right_clicked)
+        self.seek_left_button.signals.rightclicked.connect(self.cycle_seek_interval)
+        self.seek_left_button.signals.leftclicked.connect(self.seek_left_clicked)
         self.play_button.clicked.connect(self.play_clicked)
         self.save_clip_button.clicked.connect(self.save_clip_clicked)
         self.markers_button.clicked.connect(self.markers_clicked)
@@ -168,6 +207,9 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.video_slider.sliderPressed.connect(self.video_slider_pressed)
         self.video_slider.sliderReleased.connect(self.video_slider_released)
         self.rewind_button.setIcon(self.rewind_icon)
+        self.forward_button.setIcon(self.foward_icon)
+        self.seek_right_button.setIcon(self.seek_right_icon)
+        self.seek_left_button.setIcon(self.seek_left_icon)
         self.forward_button.setIcon(self.foward_icon)
 
         ## ThreadPool
@@ -222,9 +264,30 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
 
 
     # Video Player Functions
+
+    def cycle_seek_interval(self):
+        self.current_seek_increment = (self.current_seek_increment+1)%len(self.seek_increments)
+        self.statusbar.showMessage(f"Seek Interval Set: {self.seek_increments[self.current_seek_increment]['name']}", 2000)
+
+    def seek_right_clicked(self):
+        if self.video_player.source() is not None:
+            new_pos = self.video_player.position() + self.seek_increments[self.current_seek_increment]['ms']
+            if new_pos > self.video_player.duration():
+                new_pos = self.video_player.duration()
+            self.video_player.setPosition(new_pos)
+
+    def seek_left_clicked(self):
+        if self.video_player.source() is not None:
+            new_pos = self.video_player.position() - self.seek_increments[self.current_seek_increment]['ms']
+            if new_pos < 0:
+                new_pos = 0
+            self.video_player.setPosition(new_pos)
+
     def rewind_clicked(self):
-        cur_pos = self.video_player.position()
-        print(f"Current Position: {cur_pos}")
+        #cur_pos = self.video_player.position()
+        #print(f"Current Position: {cur_pos}")
+        print("Rewind Button Right Click")
+        self.statusbar.showMessage("Right Click Rewind", 1000)
     
     def forward_clicked(self):
         print("Forward Button")
@@ -251,6 +314,8 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
             self.video_player.setSource(QUrl(url))
         self.cur_video_source_url = url
         self.play_button.setEnabled(True)
+        self.seek_left_button.setEnabled(True)
+        self.seek_right_button.setEnabled(True)
         self.rewind_button.setEnabled(True)
         self.forward_button.setEnabled(True)
         self.save_clip_button.setEnabled(True)
@@ -459,11 +524,22 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.settings.sync()
 
 class HoldButton(QToolButton):
+
+    class Signals(QObject):
+        rightclicked = Signal()
+        leftclicked = Signal()
+
     def __init__(self, *args, **kwargs):
         super(HoldButton, self).__init__(*args, **kwargs)
+        self.signals = HoldButton.Signals()
+        self.setToolTipDuration(1000)
         self.mouse_down_time = 0
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if QMouseEvent.button(event) == Qt.LeftButton:
+            self.signals.leftclicked.emit()
+        if QMouseEvent.button(event) == Qt.RightButton:
+            self.signals.rightclicked.emit()
         return super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
@@ -518,9 +594,9 @@ class VodSlicer(QRunnable):
             start_secs = slice[0]
             end_secs = slice[1]
             output_file = slice[2]
-            duration_secs = end_secs - start_secs
+            self.duration_secs = end_secs - start_secs
 
-            if(duration_secs<=0):
+            if(self.duration_secs<=0):
                 self.done(False, f"Invalid times specified in clip:\n{output_file}")
 
             cmd = [
@@ -529,7 +605,7 @@ class VodSlicer(QRunnable):
                 "-ss", 
                 "%0.2f"%start_secs,
                 "-i", self.url,
-                "-t", "%0.2f"%duration_secs,
+                "-t", "%0.2f"%self.duration_secs,
                 "-map", "0", "-vcodec", "copy", "-acodec", "copy", output_file
             ]
             progress_dict["status"] = "Analyzing MP4 Atoms"

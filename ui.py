@@ -863,7 +863,7 @@ class Ui_VodSlicer(object):
 
         self.widget_11 = QWidget(self.widget_7)
         self.widget_11.setObjectName(u"widget_11")
-        self.widget_11.setMinimumSize(QSize(200, 115))
+        self.widget_11.setMinimumSize(QSize(280, 115))
         self.widget_11.setMaximumSize(QSize(200, 115))
         self.verticalLayout = QVBoxLayout(self.widget_11)
         self.verticalLayout.setObjectName(u"verticalLayout")

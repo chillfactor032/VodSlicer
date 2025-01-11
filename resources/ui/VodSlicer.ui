@@ -430,7 +430,7 @@
               <widget class="QWidget" name="widget_11" native="true">
                <property name="minimumSize">
                 <size>
-                 <width>200</width>
+                 <width>280</width>
                  <height>115</height>
                 </size>
                </property>
@@ -786,7 +786,7 @@
  </widget>
  <resources>
   <include location="../../Resources.qrc"/>
-  <include location="../../../../../Resources.qrc"/>
+  <include location="../../Resources.qrc"/>
  </resources>
  <connections/>
 </ui>

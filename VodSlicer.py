@@ -12,13 +12,14 @@ import platform
 import stat
 
 # PySide6 Imports
-from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QToolButton, QLabel, QTableWidgetItem, QHeaderView
+from PySide6.QtWidgets import QApplication, QMainWindow, QStyle, QMessageBox, QLineEdit, QFileDialog, QDialog, QStyleFactory, QToolButton, QLabel, QTableWidgetItem, QHeaderView, QToolTip
 from PySide6.QtCore import QFile, Signal, QObject, QStandardPaths, QSettings, QSize, Qt, QTextStream, QThreadPool, QRunnable, QUrl, QTimer
-from PySide6.QtGui import QMouseEvent, QStandardItemModel, QStandardItem, QPixmap, QIcon, QMovie
+from PySide6.QtGui import QMouseEvent, QStandardItemModel, QStandardItem, QPixmap, QIcon, QMovie, QCursor
 from PySide6.QtMultimedia import QAudioOutput, QMediaFormat, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
 # VodSlicer Imports
+from VodSlicerButtons import CustomButton
 import Resources_rc
 import ui as UI
 
@@ -93,18 +94,18 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.progress_dialog = ProgressDialog(self)
         self.permanent_status_label = QLabel()
         self.statusbar.addPermanentWidget(self.permanent_status_label)
-        self.seek_left_button = HoldButton(parent=self)
-        #self.seek_left_button.setFixedSize(QSize(50,35))
+        self.seek_left_button = CustomButton(parent=self)
         self.seek_left_button.setFixedSize(QSize(40,35))
         self.seek_left_button.setIconSize(QSize(24,24))
-        self.rewind_button = HoldButton(parent=self)
+        self.rewind_button = CustomButton(parent=self)
         self.rewind_button.setFixedSize(QSize(50,35))
         self.rewind_button.setIconSize(QSize(24,24))
-        self.forward_button = HoldButton(parent=self)
+        self.rewind_button.setHoldThreshold(1.0)
+        self.forward_button = CustomButton(parent=self)
         self.forward_button.setFixedSize(QSize(50,35))
         self.forward_button.setIconSize(QSize(24,24))
-        self.seek_right_button = HoldButton(parent=self)
-        #self.seek_right_button.setFixedSize(QSize(50,35))
+        self.forward_button.setHoldThreshold(1.0)
+        self.seek_right_button = CustomButton(parent=self)
         self.seek_right_button.setFixedSize(QSize(40,35))
         self.seek_right_button.setIconSize(QSize(24,24))
         self.video_controls_widget.layout().removeWidget(self.play_button)
@@ -147,7 +148,9 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.rewind_button.setEnabled(False)
         self.forward_button.setEnabled(False)
         self.seek_left_button.setEnabled(False)
+        self.seek_left_button.setToolTip("Right-Click to change seek interval")
         self.seek_right_button.setEnabled(False)
+        self.seek_right_button.setToolTip("Right-Click to change seek interval")
         self.save_clip_button.setEnabled(False)
         self.markers_button.setEnabled(False)
         self.audio_output = QAudioOutput()
@@ -158,6 +161,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.video_player.positionChanged.connect(self.position_changed)
         self.video_player.mediaStatusChanged.connect(self.media_status_change)
         self.video_player.playingChanged.connect(self.playing_changed)
+        self.video_player.bufferProgressChanged.connect(self.video_buffer_progress_changed)
         self.video_widget = QVideoWidget()
         self.video_player_widget.layout().addWidget(self.video_widget, 0, 0)
         self.video_player.setVideoOutput(self.video_widget)
@@ -168,6 +172,8 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.resume_on_release = False
         self.seek_position_frame = 0
         self.cur_video_source_url = ""
+        self.rewind_player_state = QMediaPlayer.StoppedState
+        self.mouse_tooltip = QToolTip()
 
         # How far to seek when clicking rewind buttons
         self.seek_increments = [
@@ -189,13 +195,33 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         # Start at 1 second increment
         self.current_seek_increment = 1
 
+        self.playback_speeds = [1,2,4]
+        self.current_playback_speed = 0
+        self.playback_speed_change_threshold_secs = 3
+
+        # Timers
+        self.buffer_timer = QTimer(self)
+        self.buffer_timer.timeout.connect(self.monitor_buffer)
+
+        # Playback Speed Timers
+        self.playback_speed_timer = QTimer(self)
+        self.playback_speed_timer_interval = 100
+        self.playback_speed_timer.timeout.connect(self.fast_forward)
+        self.rewind_timer = QTimer(self)
+        self.rewind_timer.timeout.connect(self.rewind)
+
         # Button Signals
         self.online_video_button.clicked.connect(self.online_video_clicked)
         self.local_video_button.clicked.connect(self.local_video_clicked)
         self.about_button.clicked.connect(self.show_about)
         self.clip_start_button.clicked.connect(self.clip_start_clicked)
         self.clip_end_button.clicked.connect(self.clip_end_clicked)
-        #self.forward_button.clicked.connect(self.forward_clicked)
+        self.rewind_button.signals.leftclicked.connect(self.rw_click)
+        self.rewind_button.signals.longclickdown.connect(self.rw_longclick_down)
+        self.rewind_button.signals.longclickup.connect(self.rw_longclick_up)
+        self.forward_button.signals.leftclicked.connect(self.cycle_playback_speed)
+        self.forward_button.signals.longclickdown.connect(self.ff_longclick_down)
+        self.forward_button.signals.longclickup.connect(self.ff_longclick_up)
         self.seek_right_button.signals.rightclicked.connect(self.cycle_seek_interval)
         self.seek_right_button.signals.leftclicked.connect(self.seek_right_clicked)
         self.seek_left_button.signals.rightclicked.connect(self.cycle_seek_interval)
@@ -206,6 +232,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.video_slider.sliderMoved.connect(self.video_slider_moved)
         self.video_slider.sliderPressed.connect(self.video_slider_pressed)
         self.video_slider.sliderReleased.connect(self.video_slider_released)
+        self.video_slider.valueChanged.connect(self.video_slider_value_changed)
         self.rewind_button.setIcon(self.rewind_icon)
         self.forward_button.setIcon(self.foward_icon)
         self.seek_right_button.setIcon(self.seek_right_icon)
@@ -262,8 +289,19 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         else:
             self.video_player_stacked_widget.setCurrentIndex(0)
 
-
     # Video Player Functions
+
+    def setPlaybackRate(self, speed=1, forward=True):
+        """ Set the current playback rate, sets to 1 if the rate isnt: 1,2,4"""
+        if speed in self.playback_speeds:
+            self.current_playback_speed = self.playback_speeds.index(speed)
+        else:
+            self.current_playback_speed = 0
+        self.video_player.setPlaybackRate(self.playback_speeds[self.current_playback_speed])
+        if forward:
+            self.statusbar.showMessage(f"Playback Speed: {self.playback_speeds[self.current_playback_speed]}x")
+        else:
+            self.statusbar.showMessage(f"Playback Speed: -{self.playback_speeds[self.current_playback_speed]}x")
 
     def cycle_seek_interval(self):
         self.current_seek_increment = (self.current_seek_increment+1)%len(self.seek_increments)
@@ -283,15 +321,73 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
                 new_pos = 0
             self.video_player.setPosition(new_pos)
 
-    def rewind_clicked(self):
-        #cur_pos = self.video_player.position()
-        #print(f"Current Position: {cur_pos}")
-        print("Rewind Button Right Click")
-        self.statusbar.showMessage("Right Click Rewind", 1000)
+    def rw_click(self):
+        if self.rewind_timer.isActive():
+            self.rewind_timer.stop()
+            self.setPlaybackRate(1)
+            if self.rewind_player_state == QMediaPlayer.PlayingState:
+                self.video_player.play()
+        else:
+            self.rw_longclick_down()
+
+    def rw_longclick_down(self):
+        self.rewind_player_state = self.video_player.playbackState()
+        self.video_player.pause()
+        self.button_hold_time_start = time.time()
+        self.rewind_timer.start(self.playback_speed_timer_interval)
+
+    def rw_longclick_up(self):
+        self.rewind_timer.stop()
+        self.setPlaybackRate(1)
+        if self.rewind_player_state == QMediaPlayer.PlayingState:
+            self.video_player.play()
     
-    def forward_clicked(self):
-        print("Forward Button")
+    def shift_video_position(self, shift_msec):
+        new_pos = self.video_player.position() + shift_msec
+        if new_pos < 0:
+            new_pos = 0
+        if new_pos > self.video_player.duration():
+            new_pos = self.video_player.duration()
+        print(f"New Position: {new_pos}")
+        self.video_player.setPosition(new_pos)
     
+    def cycle_playback_speed(self):
+        self.current_playback_speed = (self.current_playback_speed+1)%len(self.playback_speeds)
+        self.setPlaybackRate(self.playback_speeds[self.current_playback_speed])
+
+    def rewind(self):
+        elapsed = time.time()-self.button_hold_time_start
+        cycles = int(elapsed / self.playback_speed_change_threshold_secs)+1
+        if cycles > self.current_playback_speed and cycles < len(self.playback_speeds):
+            self.current_playback_speed = cycles
+            self.setPlaybackRate(self.playback_speeds[self.current_playback_speed], False)
+        self.shift_video_position(-1*self.playback_speed_timer_interval*self.playback_speeds[self.current_playback_speed])
+
+    def fast_forward(self):
+        elapsed = time.time()-self.button_hold_time_start
+        cycles = int(elapsed / self.playback_speed_change_threshold_secs)+1
+        if self.video_player.playbackState() == QMediaPlayer.PlayingState:
+            if cycles >= len(self.playback_speeds):
+                return
+            if cycles > self.current_playback_speed:
+                self.current_playback_speed = cycles
+                self.setPlaybackRate(self.playback_speeds[self.current_playback_speed])
+        else:
+            if cycles > self.current_playback_speed and cycles < len(self.playback_speeds):
+                self.current_playback_speed = cycles
+                self.setPlaybackRate(self.playback_speeds[self.current_playback_speed])
+                #print(f"Playback Rate: {self.playback_speeds[self.current_playback_speed]}")
+            self.shift_video_position(self.playback_speed_timer_interval*self.playback_speeds[self.current_playback_speed])
+
+
+    def ff_longclick_down(self):
+        self.button_hold_time_start = time.time()
+        self.playback_speed_timer.start(self.playback_speed_timer_interval)
+
+    def ff_longclick_up(self):
+        self.playback_speed_timer.stop()
+        self.setPlaybackRate(1)
+
     def load_video(self, url, local=True):
         self.play_button.setEnabled(False)
         self.rewind_button.setEnabled(False)
@@ -324,8 +420,19 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.video_player.play()
         self.video_player.pause()
 
+    #debugging purpose
+    def monitor_buffer(self):
+        has_video = self.video_player.mediaStatus()
+        #print(f"Monitor Buffer: Media Status {has_video}")
+
+    # Handle Media Player Signals
+
+    def video_buffer_progress_changed(self, progress):
+        #print(f"Video Buffer Progress: {progress}")
+        pass
+
     def media_status_change(self, status):
-        print(f"Media Status: {str(status)}")
+        #print(f"Media Status: {str(status)}")
         if status == QMediaPlayer.NoMedia:
             self.loading_screen(False)
         if status == QMediaPlayer.LoadingMedia:
@@ -337,8 +444,10 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         if status == QMediaPlayer.StalledMedia:
             self.loading_screen(False)
         if status == QMediaPlayer.BufferingMedia:
-            self.loading_screen()
-            self.statusbar.showMessage("Buffering...")
+            # Check if video is paused
+            if self.video_player.playbackState() != QMediaPlayer.PausedState:
+                self.loading_screen()
+                self.statusbar.showMessage("Buffering...")
         if status == QMediaPlayer.BufferedMedia:
             self.loading_screen(False)
             self.statusbar.showMessage("Media Ready")
@@ -362,7 +471,12 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
     def play_clicked(self):
         # Play or Pause
         if self.video_player.playbackState() != QMediaPlayer.PlayingState:
+            if self.video_player.playbackRate() != 1.0:
+                self.setPlaybackRate()
+            if self.rewind_timer.isActive():
+                self.rewind_timer.stop()
             self.video_player.play()
+            self.loading_screen(False)
         else:
             self.video_player.pause()
     
@@ -371,6 +485,12 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.cur_time_label.setText(self.msToStr(position, True))
         percent = self.cur_frame / self.video_player.duration() * 10000.0
         self.video_slider.setValue(percent)
+
+    def video_slider_value_changed(self):
+        if self.video_player.playbackState() == QMediaPlayer.PlayingState:
+            return
+        self.video_slider_moved()
+        self.video_player.setPosition(int(self.seek_position_frame))
 
     def video_slider_released(self):
         if self.seek_position_frame != self.cur_frame:
@@ -419,6 +539,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
             if os.path.exists(filename):
                 os.remove(filename)
     
+    # To Do: Next release process stream markers
     def markers_clicked(self):
         result = QFileDialog.getOpenFileName(self, "Import Stream Markers File", self.downloads_dir, "Stream Markers (*.csv)")
         if len(result[0]) == 0:
@@ -430,7 +551,6 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         result = marker_dialog.exec()
         if result == QDialog.Accepted:
             clips = marker_dialog.get_clips()
-            print(clips)
             # To Do get save file location
             # Do Slicing
         else:
@@ -516,6 +636,7 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         return self.secsToStr(ms/1000.0, show_ms)
     
     def closeEvent(self, evt):
+        self.buffer_timer.stop()
         self.settings.setValue("VodSlicer/vod_url", self.vod_url)
         self.settings.setValue("VodSlicer/vod_user", self.vod_user)
         self.settings.setValue("VodSlicer/vod_password", self.vod_password)
@@ -528,21 +649,37 @@ class HoldButton(QToolButton):
     class Signals(QObject):
         rightclicked = Signal()
         leftclicked = Signal()
+        longleftclick = Signal()
 
     def __init__(self, *args, **kwargs):
         super(HoldButton, self).__init__(*args, **kwargs)
         self.signals = HoldButton.Signals()
-        self.setToolTipDuration(1000)
+        self.hold_threshold_secs = 0
+        self.suppress_long_click = False
         self.mouse_down_time = 0
 
+    # Tell the button to supress the long click if there is a short click
+    def suppressLongClick(self, suppress=False):
+        self.suppress_long_click = suppress
+
+    def setHoldThreshold(self, threshold=0):
+        self.hold_threshold_secs = threshold
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        self.mouse_down_time = time.time()
         if QMouseEvent.button(event) == Qt.LeftButton:
-            self.signals.leftclicked.emit()
+            if self.hold_threshold_secs == 0 or not self.suppress_long_click:
+                self.signals.leftclicked.emit()
         if QMouseEvent.button(event) == Qt.RightButton:
             self.signals.rightclicked.emit()
         return super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        hold_time = time.time() - self.mouse_down_time
+        if self.hold_threshold_secs > 0 and hold_time >= self.hold_threshold_secs:
+            self.signals.longleftclick.emit()
+        else:
+            self.signals.leftclicked.emit()
         self.mouse_down_time = 0
         return super().mouseReleaseEvent(event)
     
@@ -707,6 +844,7 @@ class VodDialog(QDialog):
         self.password = password
         self.ui = UI.Ui_OpenDialog()
         self.ui.setupUi(self)
+        self.ui.vod_list_view.doubleClicked.connect(self.open_clicked)
         self.loading_label = QLabel()
         self.loading_gif = QMovie(":resources/img/loading.gif")
         self.loading_label.setMovie(self.loading_gif)

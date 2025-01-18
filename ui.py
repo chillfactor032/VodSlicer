@@ -370,9 +370,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QDialog, QGridLayout, QLabel,
-    QLineEdit, QListView, QPushButton, QSizePolicy,
-    QToolButton, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog, QGridLayout,
+    QLabel, QLineEdit, QListView, QPushButton,
+    QSizePolicy, QToolButton, QWidget)
 import Resources_rc
 
 class Ui_OpenDialog(object):
@@ -419,6 +419,7 @@ class Ui_OpenDialog(object):
         self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.vod_list_view = QListView(self.main_widget)
         self.vod_list_view.setObjectName(u"vod_list_view")
+        self.vod_list_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         self.gridLayout.addWidget(self.vod_list_view, 0, 0, 1, 1)
 

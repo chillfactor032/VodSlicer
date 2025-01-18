@@ -114,7 +114,8 @@ class VodSlicerApp(QMainWindow, UI.Ui_VodSlicer):
         self.video_controls_widget.layout().addWidget(self.play_button)
         self.video_controls_widget.layout().addWidget(self.forward_button)
         self.video_controls_widget.layout().addWidget(self.seek_right_button)
-
+        self.markers_button.setEnabled(False)
+        
         #Get Icons
         default_icon_pixmap = QStyle.StandardPixmap.SP_FileDialogListView
         icon_pixmap = QPixmap(":resources/img/vod_slicer.ico")

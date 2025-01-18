@@ -840,7 +840,8 @@ class Ui_VodSlicer(object):
 
         self.save_clip_button = QToolButton(self.widget_2)
         self.save_clip_button.setObjectName(u"save_clip_button")
-        self.save_clip_button.setMinimumSize(QSize(0, 30))
+        self.save_clip_button.setMinimumSize(QSize(77, 30))
+        self.save_clip_button.setMaximumSize(QSize(77, 16777215))
         icon2 = QIcon()
         icon2.addFile(u":/resources/img/save.svg", QSize(), QIcon.Normal, QIcon.Off)
         self.save_clip_button.setIcon(icon2)
